@@ -25,6 +25,7 @@ ModelScope 创空间是魔搭社区提供的在线应用形态，可将开源模
 | AnimeGen T2V | 动漫风格文生视频 | Wan2.2-T2V-A14B · AnimeGen-T2V | Dual Transformer · Lightning LoRA · FP8/BF16 | [在线体验](https://modelscope.cn/studios/icebergyang/AnimeGen_T2V) | [`studios/AnimeGen_T2V`](studios/AnimeGen_T2V) |
 | MiniMax-H3 NF4 Turbo | 文生音视频 / 首尾帧约束 | DiffSynth-Studio/MiniMax-H3-NF4 | DiffSynth · NF4/BF16 · Turbo LoRA · Offload | [在线体验](https://modelscope.cn/studios/MiniMax/MiniMax-H3-NF4) | [`studios/MiniMax-H3-NF4`](studios/MiniMax-H3-NF4) |
 | Anima 2.9B | 动漫 / 插画文生图 | Gazingstars123/Anima-2.9B | ComfyUI · Qwen3 Encoder · Qwen Image VAE · BF16 | [在线体验](https://modelscope.cn/studios/icebergyang/Anima-2.9B) | [`studios/Anima-2.9B`](studios/Anima-2.9B) |
+| Ornith-1.5-9B | 多轮推理对话 / 流式生成 | ornith-ai/Ornith-1.5-9B | Transformers · BF16 · 32K Context · Streaming | [在线体验](https://modelscope.cn/studios/icebergyang/ornith-1-5-9b) | [`studios/ornith-1-5-9b`](studios/ornith-1-5-9b) |
 
 更多创空间将逐个完成整理后加入。
 
