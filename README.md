@@ -17,6 +17,7 @@ ModelScope 创空间是魔搭社区提供的在线应用形态，可将开源模
 | LLaDA-Image | 文生图 / 指令图像编辑 | inclusionAI/LLaDA-Image 6B | LLaDA2 MoE · SigVQ · Flow Matching · FP8/BF16 | [在线体验](https://modelscope.cn/studios/icebergyang/LLaDA-Image) | [`studios/LLaDA-Image`](studios/LLaDA-Image) |
 | SenseNova-U1.5-8B-MoT-Preview | 信息图生成 / 指令图像编辑 | SenseNova-U1.5-8B-MoT-Preview | NEO-Unify MoT · RGB Flow Matching · BF16 | [在线体验](https://modelscope.cn/studios/SenseNova/sensenova-u1.5-preview) | [`studios/sensenova-u1.5-preview`](studios/sensenova-u1.5-preview) |
 | Irodori-TTS v4.1 Anime | 日语 TTS / 风格控制 / 音色克隆 | phasefield-audio/Irodori-TTS-v4.1-Anime | RF-DiT · Semantic-DACVAE · BF16 | [在线体验](https://modelscope.cn/studios/icebergyang/aratako-irodori-tts-v4-small-quantized) | [`studios/aratako-irodori-tts-v4-small-quantized`](studios/aratako-irodori-tts-v4-small-quantized) |
+| SenseNova-U1.5-8B-MoT | 信息图生成 / 指令图像编辑 | SenseNova-U1.5-8B-MoT | NEO-Unify MoT · RGB Flow Matching · BF16 | [在线体验](https://modelscope.cn/studios/SenseNova/sensenova-u1.5) | [`studios/sensenova-u1.5`](studios/sensenova-u1.5) |
 
 更多创空间将逐个完成整理后加入。
 
