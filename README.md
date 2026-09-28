@@ -21,6 +21,7 @@ ModelScope 创空间是魔搭社区提供的在线应用形态，可将开源模
 | Cosmos3-Edge | 图片 / 视频 / Physical AI 推理 | nv-community/Cosmos3-Edge | Nemotron Reasoner · SDPA · BF16 · Streaming | [在线体验](https://modelscope.cn/studios/nv-community/Cosmos3) | [`studios/Cosmos3`](studios/Cosmos3) |
 | TIPSv2 Feature Explorer | 特征可视化 / 分割 / 深度 / 法线 | Google TIPSv2 + DPT | ViT · SDPA · PCA · K-means · FP16 | [在线体验](https://modelscope.cn/studios/icebergyang/TIPSv2) | [`studios/TIPSv2`](studios/TIPSv2) |
 | Ming-Image 0.1 Design | 文生设计图 / 文字渲染 / RGBA | inclusionAI/Ming-Image-0.1-Design | BailingMoE-v2 · Z-Image Flow DiT · BF16 | [在线体验](https://modelscope.cn/studios/inclusionAI/ming-image-0-1-design-demo) | [`studios/ming-image-0-1-design-demo`](studios/ming-image-0-1-design-demo) |
+| Breeze TTS 2 | 音色设计 / 音色克隆 / 音色引导 | BreezeBlue/Breeze-TTS-2 | AR Backbone · Depth Decoder · 32 Codebooks · BF16 | [在线体验](https://modelscope.cn/studios/BreezeBlue/breeze-tts-2-demo) | [`studios/breeze-tts-2-demo`](studios/breeze-tts-2-demo) |
 
 更多创空间将逐个完成整理后加入。
 

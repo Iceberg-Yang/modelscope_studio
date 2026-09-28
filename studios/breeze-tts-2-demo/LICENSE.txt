@@ -1,0 +1,7 @@
+The source code in this repository is distributed under the Apache License 2.0.
+The complete license text is included in the adjacent LICENSE file.
+
+The Breeze TTS 2 model weights, derivatives, and self-hosted outputs are
+licensed separately for research and non-commercial use. See the model card
+and model LICENSE at:
+https://modelscope.cn/models/BreezeBlue/Breeze-TTS-2
