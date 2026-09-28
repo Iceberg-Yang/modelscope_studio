@@ -2,7 +2,13 @@
 
 <p align="center">
   <a href="https://modelscope.cn/profile/icebergyang">
-    <img src="https://modelscope.cn/models/modelscope/logos/resolve/master/badge.svg" alt="ModelScope" height="28">
+    <img src="https://modelscope.cn/models/modelscope/logos/resolve/master/svg/modelscope-text.svg" alt="ModelScope" height="36">
+  </a>
+</p>
+
+<p align="center">
+  <a href="https://modelscope.cn/profile/icebergyang">
+    <img src="https://img.shields.io/badge/Open%20in-ModelScope-624AFF?logo=modelscope&logoColor=white" alt="Open in ModelScope">
   </a>
 </p>
 
