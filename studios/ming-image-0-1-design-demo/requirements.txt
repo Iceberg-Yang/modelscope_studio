@@ -1,0 +1,28 @@
+# --- Ming-Image-0.1-Design on ModelScope ---
+# The base image already provides Python 3.12, a CUDA build of torch and
+# `modelscope`, so none of them are pinned here: a torch pin makes pip replace
+# the preinstalled CUDA wheel with a CPU one.
+
+# The vendored code in ./ming imports internals of both libraries
+# (`transformers.modeling_attn_mask_utils`, `transformers.pytorch_utils`,
+# `diffusers.models.attention_dispatch`), so they are held at the versions the
+# upstream Space was validated against.
+transformers==5.17.0
+diffusers==0.40.0
+accelerate
+safetensors
+einops
+Pillow
+
+# --- cold-deploy compatibility pins ---
+# pydantic pins its compiled core extension with `==`, and gradio's `mcp` extra
+# caps pydantic at 2.12.5, so the only consistent core versions are the ones a
+# permitted pydantic release names.  Pinning `pydantic-core` alone makes pip
+# take the newest core (2.49.0), which pairs with no released pydantic and the
+# image then holds a broken mix (2.11.10 + 2.49.0).  Pinning pydantic pins the
+# core transitively.  2.12.5 -> pydantic-core 2.41.5.
+pydantic==2.12.5
+# scipy is compiled against numpy 2.x while the image ships numpy 1.x, which
+# fails at import as `numpy.dtype size changed`; force the matching pair.
+numpy>=2.2.0
+scipy>=1.15.0
