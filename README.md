@@ -9,6 +9,7 @@
 | Studio | 任务 | 主要模型 | 推理技术 | ModelScope | 代码 | 状态 |
 |---|---|---|---|---|---|---|
 | LTX2.5 | 文生视频 / 图生视频 / 同步音频 | Lightricks/LTX-2.5 | DistilledPipeline · BF16 · CPU offload | [在线体验](https://modelscope.cn/studios/icebergyang/LTX2.5) | [`studios/LTX2.5`](studios/LTX2.5) | 已整理 |
+| IndexTTS-2.5 | 零样本语音克隆 / 多语言 TTS / 情感控制 | IndexTeam/IndexTTS-2.5 | GPT T2S · Zipformer S2M · BigVGAN · BF16 | [在线体验](https://modelscope.cn/studios/IndexTeam/IndexTTS-2.5) | [`studios/IndexTTS-2.5`](studios/IndexTTS-2.5) | 已整理 |
 
 更多创空间将逐个完成整理后加入。
 
