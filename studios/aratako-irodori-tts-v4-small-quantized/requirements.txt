@@ -1,0 +1,30 @@
+# --- Irodori-TTS-v4.1-Anime on ModelScope ---
+# Base image `ubuntu22.04-py312-torch2.10.0-modelscope1.37.0` already provides
+# Python 3.12, torch 2.10.0 (CUDA) and modelscope. torch is pinned so the pip
+# resolver keeps the preinstalled CUDA build instead of pulling a CPU wheel.
+torch>=2.10.0,<2.11.0
+torchaudio>=2.10.0,<2.11.0
+torchcodec>=0.10.0,<0.11.0
+
+transformers>=5.12.1,<6
+sentencepiece>=0.1.99,<0.2
+safetensors>=0.7.0
+soundfile>=0.12.0
+numpy
+peft>=0.18.0
+
+# --- dacvae (vendored in ./dacvae, Apache-2.0) runtime dependencies ---
+# `from dacvae import DACVAE` imports `audiotools` at package load, so
+# descript-audiotools is required (it also provides the `audiotools` module used
+# by codec.py reference-audio loudness normalization).
+argbind>=0.3.7
+descript-audiotools>=0.7.2
+einops
+tqdm
+
+# NOTE: silentcipher (SilentCipher audio watermark) is intentionally omitted in
+# this migration. Its watermark model is hosted only on Hugging Face
+# (sony/silentcipher) with no ModelScope mirror, and its PyPI release pins
+# torch<=2.0 (incompatible with torch 2.10). irodori_tts/watermark.py already
+# degrades gracefully: when silentcipher is unavailable the audio is generated
+# without watermarking and a warning is logged. See README for details.
