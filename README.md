@@ -2,12 +2,8 @@
 
 <p align="center">
   <a href="https://modelscope.cn/profile/icebergyang">
-    <img src="https://modelscope.cn/models/modelscope/logos/resolve/master/svg/modelscope-text.svg" alt="ModelScope" height="36">
+    <img src="https://modelscope.cn/models/modelscope/logos/resolve/master/badge.svg" alt="ModelScope" height="28">
   </a>
-</p>
-
-<p align="center">
-  <a href="https://modelscope.cn/profile/icebergyang">icebergyang 的 ModelScope 主页</a>
 </p>
 
 ModelScope 创空间是魔搭社区提供的在线应用形态，可将开源模型封装为可以直接体验的交互式 Demo。
