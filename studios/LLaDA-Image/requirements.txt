@@ -1,0 +1,11 @@
+# torch 2.8.0 + CUDA 12.4 由基础镜像提供：
+#   ubuntu22.04-cuda12.4.0-py311-torch2.8.0-modelscope1.31.0-LLM
+# 不要在此固定 torch，避免 pip 覆盖镜像内的 CUDA 构建
+transformers==4.57.6
+diffusers==0.39.0
+accelerate>=1.1.0
+safetensors>=0.5.0
+timm
+numpy
+pillow
+modelscope>=1.31.0

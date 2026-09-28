@@ -1,0 +1,9 @@
+# 本地评估/参考材料，不进入创空间运行时
+model-snapshot/
+official-repo/
+reference-studio/
+inspection-report.json
+outputs/
+__pycache__/
+*.pyc
+.DS_Store
