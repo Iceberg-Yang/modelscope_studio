@@ -1,0 +1,5 @@
+# 阻止依赖解析替换平台的 CUDA 二进制包。
+torch==2.10.0
+torchvision==0.25.0
+torchaudio==2.10.0
+flash-attn==2.8.3

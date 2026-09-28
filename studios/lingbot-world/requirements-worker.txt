@@ -1,0 +1,18 @@
+# 仅安装到独立的推理 venv，不改变 Gradio 的解释器环境。
+# Torch、torchvision、FlashAttention 继承平台已探测的版本。
+diffusers==0.35.1
+transformers==4.51.3
+tokenizers==0.21.4
+huggingface-hub==0.36.2
+accelerate==1.10.1
+safetensors==0.6.2
+einops==0.8.1
+easyDict==1.13
+ftfy==6.3.1
+sentencepiece==0.2.1
+numpy==1.26.4
+scipy==1.15.3
+imageio==2.37.0
+imageio-ffmpeg==0.6.0
+opencv-python-headless==4.10.0.84
+Pillow==11.3.0

@@ -1,0 +1,257 @@
+{
+  "revision": "792aa925d91127ba4d78e0752adfc038605369c9",
+  "url": "https://huggingface.co/spaces/hugging-apps/lingbot-world-v2-1-3b-demo",
+  "bundle": {
+    "path": "space_bundle.tar",
+    "size": 5652480,
+    "sha256": "9e004805882172cc9464f4b820d7cc19e5dcc89bbfc1a54857629a7da5bf19fa"
+  },
+  "files": [
+    {
+      "path": "LICENSE.txt",
+      "size": 20848,
+      "sha256": "9e502ba75fd0fd30cea5497b438a4bc12f07f02bc932a7a6041fd6a18b8f46a0"
+    },
+    {
+      "path": "README.md",
+      "size": 2413,
+      "sha256": "909e04c3335454fe3843113543ee2e09e63dbcc26096b553d89b597608d471a8"
+    },
+    {
+      "path": "camera.py",
+      "size": 5219,
+      "sha256": "faa9717b27c7921041d253c05125f4d9d800b076a3e14e55071f0ba9e766907b"
+    },
+    {
+      "path": "examples/00/image.jpg",
+      "size": 154078,
+      "sha256": "c17c56aa08a20579c55307085d79b01587a500fd030fac600d808058daa2dccb"
+    },
+    {
+      "path": "examples/00/intrinsics.npy",
+      "size": 15504,
+      "sha256": "0737afdfc05bdc313494110496d4cbb04e571875bdc0a6ffbc9a6d3d334dbb89"
+    },
+    {
+      "path": "examples/00/poses.npy",
+      "size": 61632,
+      "sha256": "795670d055bdfd9953fe5b015902170eba8e915e4417a0dcc62bfc1a5437d6cc"
+    },
+    {
+      "path": "examples/00/prompt.txt",
+      "size": 312,
+      "sha256": "5d78b563dd22cfc277060050ce24f64564080684b83cbca9e677674a2ad3b5c2"
+    },
+    {
+      "path": "examples/01/image.jpg",
+      "size": 106427,
+      "sha256": "6c84902663a5c1c480125716485711b0b48114b7df4f898ef71cdc9037400355"
+    },
+    {
+      "path": "examples/01/intrinsics.npy",
+      "size": 9104,
+      "sha256": "b863c3e6efd5252ea350750f05b65248ee38e65b5b36bd645cd8cb592ab51fb3"
+    },
+    {
+      "path": "examples/01/poses.npy",
+      "size": 36032,
+      "sha256": "f951c39d424f123d5d50ba2487cf14218f17bc2a45df9227d18adbd24767509f"
+    },
+    {
+      "path": "examples/01/prompt.txt",
+      "size": 207,
+      "sha256": "b836af689f84dfa3459662ea63c4a9ea21fc45b904f7b2517d85338afc103b20"
+    },
+    {
+      "path": "examples/02/image.jpg",
+      "size": 64229,
+      "sha256": "ec6a06ad5ec92a212922928eb7666f11196b6b49cb1bf301f440ee379606959d"
+    },
+    {
+      "path": "examples/02/intrinsics.npy",
+      "size": 15440,
+      "sha256": "19902d4c1718158db2be05883f3126d4d721a22245e6edb3fe480652f0172b56"
+    },
+    {
+      "path": "examples/02/poses.npy",
+      "size": 61376,
+      "sha256": "3f7f2e64b7ddb4cb0ae22b9d9a1512b326ee32e5b9077496bc19cc0852c29ea0"
+    },
+    {
+      "path": "examples/02/prompt.txt",
+      "size": 1186,
+      "sha256": "8c9650b2d86bfcb326df1ab406ff72a28920669d4b5f4222a2606322909e4eb2"
+    },
+    {
+      "path": "examples/03/image.jpg",
+      "size": 1245451,
+      "sha256": "6ee3dacfef32cfef504dd698adb8a660cf15f686535c52fed4903fef27c0edd0"
+    },
+    {
+      "path": "examples/03/intrinsics.npy",
+      "size": 4432,
+      "sha256": "821fca6cf957ae8fbb1181307f02479efb1705e04c9e05734cd02fb43462e082"
+    },
+    {
+      "path": "examples/03/poses.npy",
+      "size": 17344,
+      "sha256": "bd0a23a696e184b0b43e7767eb432bfe644690560fe327fa96961affc941c404"
+    },
+    {
+      "path": "examples/04/image.jpg",
+      "size": 3160132,
+      "sha256": "04c3d53b88bb4cd3ce7999b019b68afeed46bd145b1b81fc2d7c942eb6a4c69a"
+    },
+    {
+      "path": "examples/04/intrinsics.npy",
+      "size": 8656,
+      "sha256": "6bc0b6c63bbbee1c35547ef49ae18db17d81ff101c97a80302a9846983030e10"
+    },
+    {
+      "path": "examples/04/poses.npy",
+      "size": 34240,
+      "sha256": "cc23e2eb768a57a7734cb970d8574dd6983d5965b2d11e1b88395d95dc4218c9"
+    },
+    {
+      "path": "examples/05/image.jpg",
+      "size": 154078,
+      "sha256": "c17c56aa08a20579c55307085d79b01587a500fd030fac600d808058daa2dccb"
+    },
+    {
+      "path": "examples/05/intrinsics.npy",
+      "size": 15504,
+      "sha256": "0737afdfc05bdc313494110496d4cbb04e571875bdc0a6ffbc9a6d3d334dbb89"
+    },
+    {
+      "path": "examples/05/poses.npy",
+      "size": 61632,
+      "sha256": "795670d055bdfd9953fe5b015902170eba8e915e4417a0dcc62bfc1a5437d6cc"
+    },
+    {
+      "path": "examples/05/prompt.txt",
+      "size": 570,
+      "sha256": "d0e10b753fc63ec5431ff059b6af9244f8a715384e9fbbf081268a6c5c32d69a"
+    },
+    {
+      "path": "wan/__init__.py",
+      "size": 69,
+      "sha256": "33860d8115bcd295a559616e94c242c76572a057bcd79d8d54c80539b4e5c163"
+    },
+    {
+      "path": "wan/configs/__init__.py",
+      "size": 831,
+      "sha256": "235c027f720cd37c3d922afc6037e27958a565d9d1053e8e9b0ab380aa48d30f"
+    },
+    {
+      "path": "wan/configs/shared_config.py",
+      "size": 872,
+      "sha256": "891a6e82d9c6520e6308f9f7b11080836ea03ca7b776d2c2c75d111d2cd593cc"
+    },
+    {
+      "path": "wan/configs/wan_i2v_1_3B.py",
+      "size": 610,
+      "sha256": "4ed484e20ca3e1f1f562817f962dc957ebcdba698a4ab80da84415faf837148e"
+    },
+    {
+      "path": "wan/configs/wan_i2v_A14B.py",
+      "size": 1718,
+      "sha256": "bd0e70fb7a04a457b0a584b6b3214d0cab1d1a2d0ed77cd6f15aa8dcec899691"
+    },
+    {
+      "path": "wan/distributed/__init__.py",
+      "size": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "wan/distributed/fsdp.py",
+      "size": 1309,
+      "sha256": "bedd7d04f79fd7a30b7539dd83aa802d05563d0354fc72eb0cf479d1425d1feb"
+    },
+    {
+      "path": "wan/distributed/sequence_parallel.py",
+      "size": 21024,
+      "sha256": "e96dd7c5608aa8081adff0145c19a4fc4ffec00209d934607f9f2d57ad90cb1f"
+    },
+    {
+      "path": "wan/distributed/ulysses.py",
+      "size": 1249,
+      "sha256": "d5f2ac64ee202b47d612cae1f4fa715c8930fb87b18c04a206ce25028e3df9a3"
+    },
+    {
+      "path": "wan/distributed/util.py",
+      "size": 1306,
+      "sha256": "002321d89bd5b81285b598d78eb2a0c96822dfda8fce0949b5ae931a1bc9a97a"
+    },
+    {
+      "path": "wan/image2video.py",
+      "size": 43649,
+      "sha256": "e8ca166dc9719395a6265621603617c69616cc6d40ad00c6048f82f570a9301e"
+    },
+    {
+      "path": "wan/modules/__init__.py",
+      "size": 432,
+      "sha256": "1fc0c4aa1787543de7c40592cb494312789740e955715b2f94b95dddcb30cb86"
+    },
+    {
+      "path": "wan/modules/attention.py",
+      "size": 6252,
+      "sha256": "a6b58bcbad5a737a3411de1c8cec0db82af02da00d8671ff8df93fe0f291758d"
+    },
+    {
+      "path": "wan/modules/model.py",
+      "size": 21446,
+      "sha256": "07853562ec82d6babc34dd07b9337ccb6b93ad188a629f2feb92e87b35bfe6d6"
+    },
+    {
+      "path": "wan/modules/model_causal.py",
+      "size": 27488,
+      "sha256": "11e03d4159ae593fa51cd2a1eb02f56af31c163d323f096c8bc27adbd7d08929"
+    },
+    {
+      "path": "wan/modules/model_fast.py",
+      "size": 26808,
+      "sha256": "af32f4eeb70341ca6338054575da1ecb6d4c66e44a84bc9ff98256b37f72dc98"
+    },
+    {
+      "path": "wan/modules/t5.py",
+      "size": 16764,
+      "sha256": "48617729ee6221d5a923c05e991cfe16719863013bbcc77fdb5355f9247bed08"
+    },
+    {
+      "path": "wan/modules/tokenizers.py",
+      "size": 2358,
+      "sha256": "c6f8eb124058a26182bd22fc48484384aba67d299a07241cb2ef2bb3065f953a"
+    },
+    {
+      "path": "wan/modules/vae2_1.py",
+      "size": 23028,
+      "sha256": "8c389196ce848fb7cf2c16a641aadfa1c3507049120c6577c1fd84ca59854318"
+    },
+    {
+      "path": "wan/utils/__init__.py",
+      "size": 527,
+      "sha256": "046308907139c69026bcd2699038c62abb5dd04e9bc57ca6b6ad15250b1a6da7"
+    },
+    {
+      "path": "wan/utils/cam_utils.py",
+      "size": 5386,
+      "sha256": "379a97a2f17bcc90ab868382fef8cbd1f2735d6eefbbbc88b4533c269c2f9538"
+    },
+    {
+      "path": "wan/utils/fm_solvers.py",
+      "size": 40070,
+      "sha256": "37350e31d43ab391520944354e0130a7637f603ec80948f5acd38d21ff7bc1d3"
+    },
+    {
+      "path": "wan/utils/fm_solvers_unipc.py",
+      "size": 32733,
+      "sha256": "ebb600f3a892ba5afe7ab223487bf62d22490d1d6da43af2101f3cb93bff224a"
+    },
+    {
+      "path": "wan/utils/utils.py",
+      "size": 7202,
+      "sha256": "7b31ee431132749df3a65cd0448b20a7d18a9eb9d9758041dbe7a36cbc1d66e4"
+    }
+  ],
+  "hydrated_lfs_files": 17
+}

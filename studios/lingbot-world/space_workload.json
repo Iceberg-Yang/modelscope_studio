@@ -1,0 +1,16 @@
+{
+  "status": "experimental_space_port",
+  "source_revision": "792aa925d91127ba4d78e0752adfc038605369c9",
+  "width": 832,
+  "height": 480,
+  "frame_num": 81,
+  "chunk_size": 3,
+  "fps": 16,
+  "seed": 0,
+  "shift": 10.0,
+  "timesteps_index": [0, 250, 500, 750],
+  "peak_reserved_limit_gib": 40.0,
+  "public_max_frames": 81,
+  "source_max_frames": 237,
+  "note": "采用源Space的shift10和默认81帧；480p是面积约束，按输入宽高比对齐；237帧需独立GPU验收后再开放。"
+}
