@@ -1,0 +1,18 @@
+# Core
+torch
+accelerate
+diffusers>=0.32.0
+transformers
+peft
+imageio[ffmpeg]
+
+# Model download
+modelscope
+huggingface_hub
+
+# Optional: Copyright detection (DashScope for ModelScope / OpenAI for HF)
+dashscope
+openai
+
+# Utilities
+pydantic
