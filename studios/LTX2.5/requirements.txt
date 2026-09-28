@@ -1,0 +1,24 @@
+# Match the current ModelScope Studio SDK option exactly.
+gradio==5.49.1
+
+# The target xGPU image already contains the CUDA-enabled build. These pins
+# prevent ltx-core's broad torch~=2.7 constraint from upgrading that runtime.
+torch==2.10.0
+torchaudio==2.10.0
+transformers==5.14.1
+numpy==1.26.4
+
+modelscope==1.37.0
+
+# Install the reviewed LTX-2.5 implementation from vendored wheels.
+# This avoids depending on GitHub network access while ModelScope builds the
+# Studio, including the wheel build backend. The exact upstream commit, source,
+# checksums and license are recorded under vendor/.
+# torch~=2.7 is satisfied by the platform's preinstalled torch 2.10.0 build.
+./vendor/wheels/ltx_core-1.2.0-py3-none-any.whl
+./vendor/wheels/ltx_pipelines-1.2.0-py3-none-any.whl
+
+av
+pillow
+tqdm
+openimageio
