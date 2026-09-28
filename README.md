@@ -12,6 +12,7 @@ ModelScope 创空间是魔搭社区提供的在线应用形态，可将开源模
 | IndexTTS-2.5 | 零样本语音克隆 / 多语言 TTS / 情感控制 | IndexTeam/IndexTTS-2.5 | GPT T2S · Zipformer S2M · BigVGAN · BF16 | [在线体验](https://modelscope.cn/studios/IndexTeam/IndexTTS-2.5) | [`studios/IndexTTS-2.5`](studios/IndexTTS-2.5) |
 | MiniCPM5-2B | 多轮对话 / 流式生成 / 思考模式 | OpenBMB/MiniCPM5-2B | Transformers · LlamaForCausalLM · BF16 | [在线体验](https://modelscope.cn/studios/OpenBMB/MiniCPM5-2B) | [`studios/MiniCPM5-2B`](studios/MiniCPM5-2B) |
 | scope-camera-video-generation | 相机轨迹可控图生视频 | TencentARC/SCoPE · Wan2.2-I2V-A14B | SCoPE · FP8 · Lightning LoRA · VAE tiling | [在线体验](https://modelscope.cn/studios/TencentARC/scope-camera-video-generation) | [`studios/scope-camera-video-generation`](studios/scope-camera-video-generation) |
+| FireRedTTS3 | 音色克隆 / 音色设计 / 语音编辑 | FireRedTeam/FireRedTTS3 | Qwen3-1.7B · DiT Flow Matching · RedAE · BF16 | [在线体验](https://modelscope.cn/studios/FireRedTeam/FireRedTTS3) | [`studios/FireRedTTS3`](studios/FireRedTTS3) |
 
 更多创空间将逐个完成整理后加入。
 
