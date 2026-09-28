@@ -1,0 +1,29 @@
+# Cosmos3-Edge 魔搭创空间依赖
+# 创空间会自动安装，无需手动执行
+#
+# 参考官方环境配置: https://github.com/NVIDIA/cosmos
+# 参考官方 Demo: https://huggingface.co/spaces/nvidia/nvidia-cosmos3-edge
+#
+# torch/torchvision: 不在此声明
+# - 官方用 uv --torch-backend=auto 匹配 CUDA 版本（cu128/cu130）
+# - pip 不支持 --torch-backend，声明 torch 会安装默认 cu130（CUDA 13）
+# - 魔搭创空间预装 torch（CUDA 12.x + cuDNN 9.x），不声明则保留预装版本
+# - cuDNN 由 torch 自动管理，不单独安装 nvidia-cudnn-cu12
+# - app.py 中 os.execv 修复确保使用 torch 自带 cuDNN 而非系统旧版
+
+accelerate
+av
+imageio
+imageio-ffmpeg
+# num2words: 创空间 pip 源不可用，改在 app.py 运行时从 PyPI 安装
+# Cosmos3 processor 处理视频时间戳需要此包
+pillow
+safetensors>=0.8.0
+# transformers PyPI v5.11.0 仅有 cosmos3_omni 模块（Nano/Super）
+# cosmos3_edge 模块（Edge 专用）只在 git main 分支，尚未发布到 PyPI
+# 使用 tarball URL 替代 git clone，避免创空间 HTTP/2 stream 错误
+# git clone 报 'HTTP/2 stream was not closed cleanly'，tarball 走 pip urllib3 不受影响
+# commit 65d834fb 为上次成功安装的版本
+transformers @ https://github.com/huggingface/transformers/archive/65d834fb48624221339830499602fa9428df0583.tar.gz
+modelscope
+# gradio 由创空间预装（6.17.3），无需在 requirements 中声明
