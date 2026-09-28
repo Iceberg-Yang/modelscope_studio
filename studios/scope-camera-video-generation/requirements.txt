@@ -1,0 +1,20 @@
+torchvision
+torchao==0.11.0
+# The vendored DiffSynth-Studio modules import `transformers.modeling_utils.PretrainedConfig`,
+# which was removed in transformers 5.
+transformers<5
+tokenizers
+sentencepiece
+safetensors
+accelerate
+einops
+ftfy
+regex
+modelscope>=1.38,<2
+numpy
+Pillow
+imageio
+imageio-ffmpeg
+matplotlib
+tqdm
+typing_extensions
