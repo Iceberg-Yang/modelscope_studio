@@ -1,0 +1,12 @@
+gradio==6.17.3
+modelscope>=1.35.0
+torch
+torchvision
+transformers
+safetensors
+scikit-learn
+matplotlib
+Pillow
+sentencepiece==0.2.0
+numpy
+fast_pytorch_kmeans

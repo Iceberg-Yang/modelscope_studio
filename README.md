@@ -19,6 +19,7 @@ ModelScope 创空间是魔搭社区提供的在线应用形态，可将开源模
 | Irodori-TTS v4.1 Anime | 日语 TTS / 风格控制 / 音色克隆 | phasefield-audio/Irodori-TTS-v4.1-Anime | RF-DiT · Semantic-DACVAE · BF16 | [在线体验](https://modelscope.cn/studios/icebergyang/aratako-irodori-tts-v4-small-quantized) | [`studios/aratako-irodori-tts-v4-small-quantized`](studios/aratako-irodori-tts-v4-small-quantized) |
 | SenseNova-U1.5-8B-MoT | 信息图生成 / 指令图像编辑 | SenseNova-U1.5-8B-MoT | NEO-Unify MoT · RGB Flow Matching · BF16 | [在线体验](https://modelscope.cn/studios/SenseNova/sensenova-u1.5) | [`studios/sensenova-u1.5`](studios/sensenova-u1.5) |
 | Cosmos3-Edge | 图片 / 视频 / Physical AI 推理 | nv-community/Cosmos3-Edge | Nemotron Reasoner · SDPA · BF16 · Streaming | [在线体验](https://modelscope.cn/studios/nv-community/Cosmos3) | [`studios/Cosmos3`](studios/Cosmos3) |
+| TIPSv2 Feature Explorer | 特征可视化 / 分割 / 深度 / 法线 | Google TIPSv2 + DPT | ViT · SDPA · PCA · K-means · FP16 | [在线体验](https://modelscope.cn/studios/icebergyang/TIPSv2) | [`studios/TIPSv2`](studios/TIPSv2) |
 
 更多创空间将逐个完成整理后加入。
 
