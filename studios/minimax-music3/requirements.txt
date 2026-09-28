@@ -1,0 +1,6 @@
+./vendor/diffusers-0.40.0.dev0-py3-none-any.whl
+transformers
+accelerate
+scipy
+openai
+modelscope>=1.35.0

@@ -27,6 +27,7 @@ ModelScope 创空间是魔搭社区提供的在线应用形态，可将开源模
 | Anima 2.9B | 动漫 / 插画文生图 | Gazingstars123/Anima-2.9B | ComfyUI · Qwen3 Encoder · Qwen Image VAE · BF16 | [在线体验](https://modelscope.cn/studios/icebergyang/Anima-2.9B) | [`studios/Anima-2.9B`](studios/Anima-2.9B) |
 | Ornith-1.5-9B | 多轮推理对话 / 流式生成 | ornith-ai/Ornith-1.5-9B | Transformers · BF16 · 32K Context · Streaming | [在线体验](https://modelscope.cn/studios/icebergyang/ornith-1-5-9b) | [`studios/ornith-1-5-9b`](studios/ornith-1-5-9b) |
 | ABot-World-0 | 动作可控交互世界生成 | amap_cvlab/ABot-World-0-5B-LF | Causal DiT · LongForcing · 4-step DMD · BF16 | [在线体验](https://modelscope.cn/studios/amap_cvlab/abot-world-0) | [`studios/abot-world-0`](studios/abot-world-0) |
+| MiniMax Music 3 | 文生歌曲 / 歌词生成 / 流式播放 | MiniMax/MiniMax-Music3 | AR LM · RVQ · Flow Matching DiT · BF16 | [在线体验](https://modelscope.cn/studios/MiniMax/minimax-music3) | [`studios/minimax-music3`](studios/minimax-music3) |
 
 更多创空间将逐个完成整理后加入。
 
