@@ -23,6 +23,7 @@ ModelScope 创空间是魔搭社区提供的在线应用形态，可将开源模
 | Ming-Image 0.1 Design | 文生设计图 / 文字渲染 / RGBA | inclusionAI/Ming-Image-0.1-Design | BailingMoE-v2 · Z-Image Flow DiT · BF16 | [在线体验](https://modelscope.cn/studios/inclusionAI/ming-image-0-1-design-demo) | [`studios/ming-image-0-1-design-demo`](studios/ming-image-0-1-design-demo) |
 | Breeze TTS 2 | 音色设计 / 音色克隆 / 音色引导 | BreezeBlue/Breeze-TTS-2 | AR Backbone · Depth Decoder · 32 Codebooks · BF16 | [在线体验](https://modelscope.cn/studios/BreezeBlue/breeze-tts-2-demo) | [`studios/breeze-tts-2-demo`](studios/breeze-tts-2-demo) |
 | AnimeGen T2V | 动漫风格文生视频 | Wan2.2-T2V-A14B · AnimeGen-T2V | Dual Transformer · Lightning LoRA · FP8/BF16 | [在线体验](https://modelscope.cn/studios/icebergyang/AnimeGen_T2V) | [`studios/AnimeGen_T2V`](studios/AnimeGen_T2V) |
+| MiniMax-H3 NF4 Turbo | 文生音视频 / 首尾帧约束 | DiffSynth-Studio/MiniMax-H3-NF4 | DiffSynth · NF4/BF16 · Turbo LoRA · Offload | [在线体验](https://modelscope.cn/studios/MiniMax/MiniMax-H3-NF4) | [`studios/MiniMax-H3-NF4`](studios/MiniMax-H3-NF4) |
 
 更多创空间将逐个完成整理后加入。
 
