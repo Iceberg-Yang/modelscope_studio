@@ -1,15 +1,15 @@
 # ModelScope Studio Collection
 
-这个仓库集中整理我维护过的 ModelScope 创空间代码。每个创空间作为 `studios/` 下的独立目录保存，并补充模型来源、推理方案、关键技术、运行条件和在线体验链接。
+ModelScope 创空间是魔搭社区提供的在线应用形态，可将开源模型封装为能够在浏览器中直接体验的交互式 Demo。
 
-仓库采用新的快照历史，不迁移各个创空间原仓库的 Git 提交记录。项目代码会逐个完成敏感信息、大文件和可运行性检查后再加入。
+本仓库整理我开发维护的 ModelScope 创空间，每个创空间作为 `studios/` 下的独立目录保存，并补充模型来源、推理方案、关键技术、运行条件和在线体验链接。
 
 ## 项目列表
 
-| Studio | 任务 | 主要模型 | 推理技术 | ModelScope | 代码 | 状态 |
-|---|---|---|---|---|---|---|
-| LTX2.5 | 文生视频 / 图生视频 / 同步音频 | Lightricks/LTX-2.5 | DistilledPipeline · BF16 · CPU offload | [在线体验](https://modelscope.cn/studios/icebergyang/LTX2.5) | [`studios/LTX2.5`](studios/LTX2.5) | 已整理 |
-| IndexTTS-2.5 | 零样本语音克隆 / 多语言 TTS / 情感控制 | IndexTeam/IndexTTS-2.5 | GPT T2S · Zipformer S2M · BigVGAN · BF16 | [在线体验](https://modelscope.cn/studios/IndexTeam/IndexTTS-2.5) | [`studios/IndexTTS-2.5`](studios/IndexTTS-2.5) | 已整理 |
+| Studio | 任务 | 主要模型 | 推理技术 | ModelScope | 代码 |
+|---|---|---|---|---|---|
+| LTX2.5 | 文生视频 / 图生视频 / 同步音频 | Lightricks/LTX-2.5 | DistilledPipeline · BF16 · CPU offload | [在线体验](https://modelscope.cn/studios/icebergyang/LTX2.5) | [`studios/LTX2.5`](studios/LTX2.5) |
+| IndexTTS-2.5 | 零样本语音克隆 / 多语言 TTS / 情感控制 | IndexTeam/IndexTTS-2.5 | GPT T2S · Zipformer S2M · BigVGAN · BF16 | [在线体验](https://modelscope.cn/studios/IndexTeam/IndexTTS-2.5) | [`studios/IndexTTS-2.5`](studios/IndexTTS-2.5) |
 
 更多创空间将逐个完成整理后加入。
 
