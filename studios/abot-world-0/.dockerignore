@@ -1,0 +1,10 @@
+.git
+.gitignore
+.gradio_cache
+__pycache__
+*.py[cod]
+checkpoints
+outputs
+*.mp4
+*.log
+.DS_Store
