@@ -1,0 +1,10 @@
+__pycache__/
+*.py[cod]
+.model_cache/
+.cache/
+*.log
+.DS_Store
+
+# 内部工程记录，不推送到创空间仓库（用户可见的移植说明在 README.md）
+studio-assessment.yaml
+studio-verification.yaml

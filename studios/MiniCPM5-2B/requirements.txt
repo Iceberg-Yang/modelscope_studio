@@ -1,0 +1,18 @@
+# MiniCPM5-2B Demo 依赖
+#
+# 刻意不声明的包（由创空间 base_image 提供，重复声明可能覆盖平台预编译版本）：
+#   torch        —— base_image ubuntu22.04-py312-torch2.10.0 已含 CUDA 版 torch，
+#                   在此声明有被 pip 换成 CPU 版或触发数 GB 重新下载的风险
+#   gradio       —— 由创空间 sdk_version 设置决定（本空间用 6.17.3），不在此固定
+#   fastapi / uvicorn —— gradio 的传递依赖，随 gradio 一起提供
+#
+# 已移除的上游依赖：
+#   spaces       —— Hugging Face ZeroGPU 专用包，魔搭无对应物，@spaces.GPU 已删除
+
+# 官方 Model Card 要求 transformers>=5.6（上游 Space 写的 >=4.56 偏松）
+transformers>=5.6
+accelerate
+sentencepiece
+
+# 模型下载：替代上游的 huggingface_hub
+modelscope>=1.37.0
