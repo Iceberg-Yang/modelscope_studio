@@ -1,0 +1,32 @@
+# YuE2-3B ModelScope Studio — Python dependencies
+#
+# Gradio itself is provided by the studio's sdk_version (Gradio 6.x), matching the
+# sister MiniMax-Music3 studio, so it is intentionally NOT pinned here — pinning it
+# would trigger a conflicting reinstall over the platform-provided build.
+#
+# The base image (ubuntu22.04-py312-torch2.10.0-modelscope1.37.0) already ships
+# torch 2.10.0 (CUDA build) and modelscope 1.37.0, so torch is intentionally NOT
+# listed here either: it is already satisfied and listing it risks pip pulling a
+# non-CUDA wheel over the platform build. The model runs on PyTorch's native
+# scaled_dot_product_attention, so no extra third-party attention kernels are needed.
+#
+# The official YuE2 inference package is NOT installed here. It ships as a wheel
+# inside the ModelScope model repo (m-a-p/YuE2-3B); app.py unpacks it from the
+# downloaded snapshot onto sys.path at startup (see README.md). It is deliberately
+# not referenced as a local wheel because the studio build installs this
+# requirements.txt in an early image stage, before the repository files are copied
+# in, so a local wheel path would not resolve yet. Only the package's runtime
+# dependencies are declared below, pinned to the versions it was tested against.
+#
+# numpy is deliberately NOT pinned. The base image ships a numpy whose binary ABI
+# matches its prebuilt scipy / scikit-learn (which transformers pulls in while the
+# model loads). Forcing numpy 2.x there breaks scipy's C extension with
+# "numpy.core.multiarray failed to import"; the inference code runs fine on the
+# base numpy, so it is left exactly as the platform image provides it.
+
+transformers==4.57.6
+huggingface-hub==0.36.2
+safetensors==0.7.0
+tiktoken==0.12.0
+soundfile==0.13.1
+accelerate==1.13.0

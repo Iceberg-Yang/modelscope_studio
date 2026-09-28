@@ -1,0 +1,34 @@
+# Reference clone of the ModelScope model repo (audit source, not deployed).
+model-source/
+
+# Local preview / dev virtualenv (skipped by the migration audit too).
+.venv/
+venv/
+.preview-venv/
+
+# Runtime model cache & generated songs. On the studio, weights are fetched into
+# the persistent /mnt/workspace directory at startup; locally we fall back here.
+_models/
+outputs/
+*.flac
+*.wav
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.ipynb_checkpoints/
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
+
+# Migration audit staging
+.audit-staging/
+
+# Internal migration records — kept locally for reference, not deployed to the
+# public studio. User-facing attribution/license lives in README.md, LICENSE,
+# THIRD_PARTY_NOTICES.md and the in-app footer.
+studio-assessment.yaml
+studio-verification.yaml
