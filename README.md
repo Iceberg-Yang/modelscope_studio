@@ -41,6 +41,9 @@ ModelScope 创空间是魔搭社区提供的在线应用形态，可将开源模
 | ABot-World-0 | 动作可控交互世界生成 | amap_cvlab/ABot-World-0-5B-LF | Causal DiT · LongForcing · 4-step DMD · BF16 | [在线体验](https://modelscope.cn/studios/amap_cvlab/abot-world-0) | [`studios/abot-world-0`](studios/abot-world-0) |
 | MiniMax Music 3 | 文生歌曲 / 歌词生成 / 流式播放 | MiniMax/MiniMax-Music3 | AR LM · RVQ · Flow Matching DiT · BF16 | [在线体验](https://modelscope.cn/studios/MiniMax/minimax-music3) | [`studios/minimax-music3`](studios/minimax-music3) |
 | LingBot-World V2 1.3B | 相机轨迹可控图生视频 | Robbyant/lingbot-world-v2-1.3b-causal-fast | Causal-Fast DiT · 4-step Flow · KV Cache · BF16 | [在线体验](https://modelscope.cn/studios/icebergyang/lingbot-world) | [`studios/lingbot-world`](studios/lingbot-world) |
+| Marigold V2 | 深度 / 透视深度 / 法线 / 反照率预测 | huawei-bayerlab/marigold-v2-0 · Qwen-Image-Edit-2509 | NF4/BF16 · LoRA · One-step Flow | [在线体验](https://www.modelscope.ai/studios/huawei-bayerlab/Marigold-V2) | [`studios/Marigold-V2`](studios/Marigold-V2) |
+| WindowSeat Reflection Removal | 图像反射去除 | huawei-bayerlab/windowseat-reflection-removal-v1-0 | NF4/BF16 · LoRA · Tiled One-step Flow | [在线体验](https://www.modelscope.ai/studios/huawei-bayerlab/windowseat-reflection-removal) | [`studios/windowseat-reflection-removal`](studios/windowseat-reflection-removal) |
+| AuK | 指令 TTS / 音色迁移 / 语音编辑 | Tencent-Hunyuan/AuK · AuK-Flash | Qwen2.5-Omni · CFMEdit · BigVGAN Flow VAE | [在线体验](https://www.modelscope.ai/studios/Tencent-Hunyuan/AuK) | [`studios/AuK`](studios/AuK) |
 
 ## 目录结构
 
@@ -50,11 +53,13 @@ modelscope_studio/
 └── studios/
     ├── Anima-2.9B/
     ├── AnimeGen_T2V/
+    ├── AuK/
     ├── Cosmos3/
     ├── FireRedTTS3/
     ├── IndexTTS-2.5/
     ├── LLaDA-Image/
     ├── LTX2.5/
+    ├── Marigold-V2/
     ├── MiniCPM5-2B/
     ├── MiniMax-H3-NF4/
     ├── TIPSv2/
@@ -68,7 +73,8 @@ modelscope_studio/
     ├── ornith-1-5-9b/
     ├── scope-camera-video-generation/
     ├── sensenova-u1.5/
-    └── sensenova-u1.5-preview/
+    ├── sensenova-u1.5-preview/
+    └── windowseat-reflection-removal/
 ```
 
 每个目录均包含独立 README，并保留对应创空间运行所需的应用代码、配置和资源文件。

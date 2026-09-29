@@ -1,0 +1,27 @@
+# Force PyPI's Fastly CDN (Singapore edge) — fast from ap-southeast-1 build nodes.
+# Do NOT add --extra-index-url mirrors.aliyun.com: pip then pulls the big CUDA/torch wheels
+# from the China mirror cross-region (~420 kB/s) instead of the CDN.
+--index-url https://pypi.org/simple
+diffusers>=0.36.0
+accelerate
+bitsandbytes==0.48.2
+huggingface_hub
+modelscope
+imageio
+imageio-ffmpeg
+peft>=0.20.0
+Pillow
+safetensors
+scipy
+torch==2.8.0
+torchvision==0.23.0
+torchaudio==2.8.0
+tqdm
+transformers<6
+# --only-binary=xformers
+# xformers
+
+# gradio-dualvision
+gradio==5.29.0
+gradio_client==1.10.0
+pi_heif==1.1.1
