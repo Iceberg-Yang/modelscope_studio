@@ -7,6 +7,7 @@
 /* ══════════════════════════════════════════════════════════════════════════════
    §0  GOOGLE FONTS — 使用 CSS @import 在 gradio 容器内加载
    ══════════════════════════════════════════════════════════════════════════════ */
+@import url("https://fonts.googleapis.com/css2?family=VT323&family=Orbitron:wght@400;500;600;700&family=Share+Tech+Mono&family=ZCOOL+QingKe+HuangYou&display=swap");
 
 /* 注意: Gradio 会将 CSS 注入到 shadow DOM，需要使用 CSS 变量方式使用字体 */
 

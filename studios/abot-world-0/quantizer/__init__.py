@@ -26,6 +26,7 @@ def apply_fp8_quantization(
     quant_type: str = "fp8-per-token",
     include_patterns: Optional[List[str]] = None,
     exclude_patterns: Optional[List[str]] = None,
+    min_weight_numel: int = 0,
 ) -> Dict[str, object]:
     """Apply DynamicDiTQuantizer to the provided DiT model."""
     final_include_patterns = (
@@ -39,6 +40,7 @@ def apply_fp8_quantization(
         quant_type=quant_type,
         include_patterns=final_include_patterns,
         exclude_patterns=final_exclude_patterns,
+        min_weight_numel=int(min_weight_numel),
     )
     quantizer.convert_linear(model)
     return {
@@ -46,4 +48,5 @@ def apply_fp8_quantization(
         "quant_type": quant_type,
         "include_patterns": final_include_patterns,
         "exclude_patterns": final_exclude_patterns,
+        "min_weight_numel": int(min_weight_numel),
     }

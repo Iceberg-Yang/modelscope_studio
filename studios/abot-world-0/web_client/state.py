@@ -25,6 +25,7 @@ class StreamState:
         self._key_lock = threading.Lock()     # 保护 activated 的读写锁
         self.worker_error: str | None = None  # worker 异常时写入，start_stream 通过 status 展示后清空
         self.model_ready: bool = False  # 后台模型加载完成后为 True，「重塑你的世界」方可点击
+        self.model_error: str | None = None  # 后台下载/加载失败，供 UI 与 /healthz 诊断
         self.is_stopping: bool = False  # 停止中过渡态：on_stop 设置，start_stream finally 清除
         self.completion_status: str | None = None  # 完成状态: "completed" | "stopped" | None
         self.completion_deadline: float | None = None  # 完成提示倒计时结束时刻（time.monotonic）

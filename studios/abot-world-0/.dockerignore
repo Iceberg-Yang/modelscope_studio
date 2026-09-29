@@ -1,10 +1,19 @@
 .git
 .gitignore
-.gradio_cache
 __pycache__
 *.py[cod]
-checkpoints
-outputs
-*.mp4
 *.log
+*.mp4
+*.tar
+*.zip
 .DS_Store
+checkpoints
+# Runtime videos stay out of the image, but the small pre-generated five-view
+# reference caches are required by the bundled demo presets.
+outputs/*
+!outputs/ref_image_cache/
+!outputs/ref_image_cache/**
+third_party/SageAttention/.git
+third_party/SageAttention/build
+third_party/SageAttention/dist
+third_party/SageAttention/*.egg-info

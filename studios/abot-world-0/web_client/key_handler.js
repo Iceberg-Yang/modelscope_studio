@@ -40,33 +40,28 @@
     }
 
     function tryInit() {
-        const container = document.getElementById('key-state-input');
-        const tb = container ? container.querySelector('textarea') : null;
         const hudReady = hasHUD();
         const hasW = !!findKeyElement('W');
         const hasI = !!findKeyElement('I');
 
-        console.log(`[KeyHandler] tryInit waited=${waited}ms container=${!!container} tb=${!!tb} hud=${hudReady} W=${hasW} I=${hasI}`);
+        console.log(`[KeyHandler] tryInit waited=${waited}ms hud=${hudReady} W=${hasW} I=${hasI}`);
 
-        if (!tb || !hudReady || !hasW || !hasI) {
+        if (!hudReady || !hasW || !hasI) {
             waited += POLL;
             if (waited < MAX_WAIT) {
                 setTimeout(tryInit, POLL);
             } else {
                 console.error(`[KeyHandler] DOM not ready after ${MAX_WAIT}ms, giving up.`);
-                // 即使 HUD 没找到，也尝试设置键盘监听
-                if (tb) {
-                    console.log('[KeyHandler] Forcing setup without HUD...');
-                    setup(tb);
-                }
+                console.log('[KeyHandler] Forcing setup without HUD...');
+                setup();
             }
             return;
         }
         console.log(`[KeyHandler] DOM ready after ${waited}ms, setting up...`);
-        setup(tb);
+        setup();
     }
 
-    function setup(tb) {
+    function setup() {
         // 统一使用大写，与后端 pipeline.set_act() 接口保持一致
         const KEYS = new Set(['W', 'A', 'S', 'D', 'I', 'J', 'K', 'L']);
 
@@ -90,13 +85,6 @@
         const activatedKeys = new Set();  // 自上次发送起曾激活的键（未消费）
         const pressTime = {};             // 记录每个键最后一次按下的时间戳（ms）
         let throttleTimer = null;
-
-        // Use native setter to bypass Svelte's reactive DOM interception
-        const nativeSetter = Object.getOwnPropertyDescriptor(
-            window.HTMLTextAreaElement.prototype, 'value'
-        ).set;
-
-        console.log(`[KeyHandler] nativeSetter type=${typeof nativeSetter}`);
 
         // 对 pressedKeys 做冲突消解：每个冲突组内只保留最后按下的键
         const resolveConflicts = (keys) => {
@@ -130,24 +118,41 @@
             });
         };
 
+        const forwardToStreamIframe = (pressed, activated) => {
+            const message = {
+                type: 'abot-control',
+                pressed,
+                activated,
+                sentAt: Date.now(),
+            };
+            let delivered = 0;
+            document.querySelectorAll(
+                'iframe[data-abot-stream="true"], iframe[src*="/stream_page"]'
+            ).forEach((iframe) => {
+                if (!iframe.contentWindow) return;
+                try {
+                    iframe.contentWindow.postMessage(message, window.location.origin);
+                    delivered += 1;
+                } catch (err) {
+                    console.warn('[KeyHandler] iframe postMessage failed', err);
+                }
+            });
+            if (delivered) {
+                console.log(`[KeyHandler] forwarded control to ${delivered} stream iframe(s)`);
+            }
+        };
+
         const sendKeys = () => {
             // 冲突消解：pressed 和 activated 都要过滤
             const resolvedPressed = resolveConflicts(pressedKeys);
             const resolvedActivated = resolveConflicts(activatedKeys);
+            const pressed = Array.from(resolvedPressed);
+            const activated = Array.from(resolvedActivated);
 
-            const payload = JSON.stringify({
-                pressed: Array.from(resolvedPressed),
-                activated: Array.from(resolvedActivated)
-            });
-            console.log(`[KeyHandler] sendKeys payload=${payload}${resolvedPressed.size < pressedKeys.size ? ` (conflict resolved: raw pressed=${JSON.stringify(Array.from(pressedKeys))})` : ''}`);
+            console.log(`[KeyHandler] sendKeys pressed=${JSON.stringify(pressed)} activated=${JSON.stringify(activated)}${resolvedPressed.size < pressedKeys.size ? ` (conflict resolved: raw pressed=${JSON.stringify(Array.from(pressedKeys))})` : ''}`);
+            // Gradio 外层是键盘状态的唯一主来源，直接发给同源 iframe。
+            forwardToStreamIframe(pressed, activated);
             activatedKeys.clear();
-            nativeSetter.call(tb, payload);
-            tb.dispatchEvent(new InputEvent('input', {
-                bubbles: true,
-                inputType: 'insertText',
-                data: payload,
-            }));
-            tb.dispatchEvent(new Event('change', { bubbles: true }));
         };
 
         const triggerSend = () => {
@@ -167,10 +172,9 @@
             triggerSend();
         };
 
-        /** 焦点在此类元素上时不劫持 WASD/IJKL；#key-state-input 内例外（隐藏同步框） */
+        /** 焦点在输入控件上时不劫持 WASD/IJKL。 */
         function isGameKeysBlockedTarget(el) {
             if (!el || el.nodeType !== Node.ELEMENT_NODE) return false;
-            if (el.closest && el.closest('#key-state-input')) return false;
             if (el.isContentEditable) return true;
             const tag = el.tagName;
             if (tag === 'TEXTAREA' || tag === 'SELECT') return true;
@@ -218,7 +222,7 @@
             activatedKeys.add(key);
             updateHUD();
             triggerSend();
-        }, true);
+        });
 
         document.addEventListener('keyup', (e) => {
             if (isGameKeysBlockedTarget(e.target)) return;
@@ -230,7 +234,7 @@
             // pressTime 保留，keyup 后对方键仍然有效（松开后不影响胜者判断）
             updateHUD();
             triggerSend();
-        }, true);
+        });
 
         // 浏览器失焦/切后台时，保证 HUD 与状态不残留
         window.addEventListener('blur', () => clearAllTrackedKeys('window_blur'));

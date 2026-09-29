@@ -237,8 +237,9 @@ class TAEW2_2VAEWrapper(torch.nn.Module):
             #     latent, parallel=parallel, show_progress_bar=False
             # )
             out = self.taehv.decode(latent)
-        # TAEHV returns [0, 1], convert to [-1, 1] to match WanVAEWrapper
-        out = out.mul(2).sub(1).clamp(-1, 1).float()
+        # TAEHV returns [0, 1]. Keep the FP16 result on GPU; callers that need
+        # display frames convert directly to uint8 before copying to CPU.
+        out = out.mul(2).sub(1).clamp(-1, 1)
         if return_in_cpu:
             out = out.cpu()
         return out
@@ -546,12 +547,6 @@ class WanDiffusionWrapper(torch.nn.Module):
         use_relative_rope = bool(model_init_kwargs.pop("use_relative_rope", False))
         if is_causal:
             model_init_kwargs["use_relative_rope"] = use_relative_rope
-            # Loading the 5B generator directly on GPU avoids holding a second
-            # full copy in CPU RAM. This is required by the A10 Studio profile;
-            # runtime VRAM is controlled through resolution and KV-cache size.
-            if torch.cuda.is_available():
-                model_init_kwargs.setdefault("device_map", "cuda")
-                model_init_kwargs.setdefault("torch_dtype", torch.bfloat16)
             self.model = CausalWanModel.from_pretrained(
                 model_name, local_attn_size=local_attn_size, sink_size=sink_size, model_type=model_type, num_frame_per_block=num_frame_per_block,
                 **model_init_kwargs)

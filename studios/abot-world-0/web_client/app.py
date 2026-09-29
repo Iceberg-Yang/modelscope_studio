@@ -11,7 +11,15 @@ import os
 import time
 import json
 import threading
+import traceback
 from pathlib import Path
+
+# 确保日志立即输出（ModelScope SDK 可能缓冲 stdout）
+try:
+    sys.stdout.reconfigure(line_buffering=True)
+    sys.stderr.reconfigure(line_buffering=True)
+except Exception:
+    pass
 
 _project_root = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(_project_root))
@@ -25,18 +33,18 @@ os.environ["GRADIO_TEMP_DIR"] = str(_gradio_tmp)
 # ── B. 导入 ─────────────────────────────────────────────────────────────────
 from omegaconf import OmegaConf
 import gradio as gr
+import torch
 
 from web_client.config import (
     PROJECT_ROOT, WEB_DIR, DEBUG_FRONTEND_ONLY,
-    STREAM_HEIGHT, DEFAULT_REF_IMAGE, PRESETS_FALLBACK_PROMPT,
+    STREAM_HEIGHT, STREAM_WIDTH, DEFAULT_REF_IMAGE, PRESETS_FALLBACK_PROMPT,
     SCENE_PRESETS_PATH,
     SERVER_NAME, SERVER_PORT, SHUTDOWN_GRACE_SECONDS,
     VAE_TYPE,
     USE_FP8_GEMM,
 )
 from web_client.state import state
-from web_client.keyboard import on_key_update
-from web_client.inference import on_click_update_prompt, on_stop, check_model_ready_ui, show_completion_toast
+from web_client.inference import on_click_update_prompt, on_stop, check_model_ready_ui, show_completion_toast, on_click_start_ws, on_stop_ws
 from web_client.ui_helpers import format_current_prompt_md
 from web_client.pipeline_loader import get_pipeline, _init_lock
 
@@ -51,6 +59,143 @@ _THEME_CSS = _theme_path.read_text(encoding="utf-8") if _theme_path.is_file() el
 _HUD_CSS = (WEB_DIR / "key_hud.css").read_text(encoding="utf-8")
 _PROMPT_BTNS_CSS = (WEB_DIR / "prompt_buttons.css").read_text(encoding="utf-8")
 _COMBINED_CSS = _THEME_CSS + "\n" + _HUD_CSS + "\n" + _PROMPT_BTNS_CSS
+
+# ── D2. 旧版 SSE canvas JS（Docker入口不注入，仅保留兼容）
+# 使用 MutationObserver 监听 #ws-canvas-slot 内容变化，不依赖 onload
+_SSE_CANVAS_JS = f"""
+function abot_start_stream(session_id) {{
+  // 关闭已有连接
+  if (window._abot_sse) {{ window._abot_sse.close(); window._abot_sse = null; }}
+  if (window._abot_ctrl_timer) {{ clearInterval(window._abot_ctrl_timer); window._abot_ctrl_timer = null; }}
+  const imgEl = document.querySelector('.fe-video-fixed img') || document.querySelector('.fe-video-fixed');
+  if (!imgEl) {{ console.error('abot: .fe-video-fixed not found'); return; }}
+  const wrap = imgEl.closest('.fe-video-wrap') || imgEl.parentElement;
+  wrap.style.position = 'relative';
+  // 移除旧 canvas
+  const old = document.getElementById('abot-canvas');
+  if (old) old.remove();
+  const canvas = document.createElement('canvas');
+  canvas.id = 'abot-canvas';
+  canvas.width = {STREAM_WIDTH};
+  canvas.height = {STREAM_HEIGHT};
+  canvas.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;z-index:10;object-fit:cover;';
+  wrap.appendChild(canvas);
+  const ctx = canvas.getContext('2d', {{ alpha: false, desynchronized: true }});
+  // SSE 连接
+  const es = new EventSource('/stream?session_id=' + session_id);
+  window._abot_sse = es;
+  // Jitter buffer
+  const JITTER_MAX = 16, JITTER_MIN = 3;
+  let jitterBuf = [];
+  let renderPrimed = false;
+  let renderInterval = 1000 / 8;
+  let lastPaint = 0, lastArrival = 0, arrivalEma = 0;
+  es.addEventListener('frame', async (e) => {{
+    const data = JSON.parse(e.data);
+    const now = performance.now();
+    if (lastArrival) {{
+      const gap = now - lastArrival;
+      arrivalEma = arrivalEma ? (0.2 * gap + 0.8 * arrivalEma) : gap;
+      const tgt = Math.min(200, Math.max(20, arrivalEma));
+      renderInterval = 0.2 * tgt + 0.8 * renderInterval;
+    }}
+    lastArrival = now;
+    try {{
+      const raw = atob(data.jpeg);
+      const arr = new Uint8Array(raw.length);
+      for (let i = 0; i < raw.length; i++) arr[i] = raw.charCodeAt(i);
+      const bitmap = await createImageBitmap(new Blob([arr], {{type:'image/jpeg'}}));
+      jitterBuf.push({{ bitmap, blk: data.block, fps: data.fps }});
+      while (jitterBuf.length > JITTER_MAX) {{
+        const stale = jitterBuf.shift();
+        if (stale.bitmap && stale.bitmap.close) stale.bitmap.close();
+      }}
+      if (!renderPrimed && jitterBuf.length >= JITTER_MIN) {{
+        renderPrimed = true;
+        lastPaint = performance.now() - renderInterval;
+      }}
+    }} catch(err) {{ console.error('frame decode', err); }}
+  }});
+  es.addEventListener('status', (e) => {{
+    const msg = JSON.parse(e.data);
+    const el = document.querySelector('.fe-status');
+    if (el) el.innerHTML = '**' + msg + '**';
+  }});
+  es.addEventListener('ended', () => {{ es.close(); }});
+  es.addEventListener('error', (e) => {{ console.error('SSE error:', e); }});
+  function renderClock() {{
+    requestAnimationFrame(renderClock);
+    if (!renderPrimed || jitterBuf.length === 0) return;
+    const now = performance.now();
+    // buffer 深度越高，播放越快；越低越慢，但不低于 ~3 FPS
+    const minInterval = 83;
+    const maxInterval = 333;
+    const ratio = Math.min(1, jitterBuf.length / JITTER_MAX);
+    let targetInterval = maxInterval - (maxInterval - minInterval) * ratio;
+    if (now - lastPaint < targetInterval) return;
+    const entry = jitterBuf.shift();
+    lastPaint = now;
+    ctx.drawImage(entry.bitmap, 0, 0, canvas.width, canvas.height);
+    if (entry.bitmap && entry.bitmap.close) entry.bitmap.close();
+  }}
+  requestAnimationFrame(renderClock);
+  // Keyboard: send held keys via HTTP POST at 10Hz
+  if (!window._abot_keys_bound) {{
+    window._abot_keys_bound = true;
+    window._abot_pressed = new Set();
+    const KEY_MAP = {{ KeyW:'W', KeyA:'A', KeyS:'S', KeyD:'D', KeyI:'I', KeyJ:'J', KeyK:'K', KeyL:'L' }};
+    document.addEventListener('keydown', (e) => {{
+      const k = KEY_MAP[e.code];
+      if (k) {{ e.preventDefault(); window._abot_pressed.add(k); updateKeycaps(); }}
+      if (e.code === 'Escape') {{ window._abot_pressed.clear(); updateKeycaps(); }}
+    }});
+    document.addEventListener('keyup', (e) => {{
+      const k = KEY_MAP[e.code];
+      if (k) {{ window._abot_pressed.delete(k); updateKeycaps(); }}
+    }});
+    function updateKeycaps() {{
+      document.querySelectorAll('.keycap[data-key]').forEach(el => {{
+        el.classList.toggle('active', window._abot_pressed.has(el.dataset.key));
+      }});
+    }}
+  }}
+  if (window._abot_ctrl_timer) clearInterval(window._abot_ctrl_timer);
+  window._abot_ctrl_timer = setInterval(() => {{
+    fetch('/control?session_id=' + session_id, {{
+      method: 'POST',
+      headers: {{'Content-Type': 'application/json'}},
+      body: JSON.stringify({{ buttons: Array.from(window._abot_pressed || []) }})
+    }}).catch(() => {{}});
+  }}, 100);
+}}
+function abot_stop_stream() {{
+  if (window._abot_sse) {{ window._abot_sse.close(); window._abot_sse = null; }}
+  if (window._abot_ctrl_timer) {{ clearInterval(window._abot_ctrl_timer); window._abot_ctrl_timer = null; }}
+  const c = document.getElementById('abot-canvas');
+  if (c) c.remove();
+}}
+// 轮询监听 #ws-canvas-slot 内容变化（比 MutationObserver 更可靠，不受 Svelte DOM 替换影响）
+setInterval(function() {{
+  const slot = document.getElementById('ws-canvas-slot');
+  if (!slot) return;
+  const startEl = slot.querySelector('[data-session-id]');
+  if (startEl) {{
+    const sid = startEl.getAttribute('data-session-id');
+    if (sid && window._abot_last_sid !== sid) {{
+      console.log('[ABOT] start stream:', sid);
+      window._abot_last_sid = sid;
+      abot_start_stream(sid);
+    }}
+  }}
+  const stopEl = slot.querySelector('[data-action="stop"]');
+  if (stopEl && window._abot_last_sid) {{
+    console.log('[ABOT] stop stream');
+    window._abot_last_sid = null;
+    abot_stop_stream();
+  }}
+}}, 200);
+"""
+_COMBINED_JS = _KEY_HANDLER_JS + "\n" + _SSE_CANVAS_JS
 
 # ── E. scene_presets.yaml（唯一数据源：图 + Prompt + default_prompt）──────────
 REF_IMAGE_ENTRIES: list[tuple[str, str]] = []  # [(path, caption), ...]
@@ -81,14 +226,12 @@ def _resolve_prompt(raw: str, base_dir: Path) -> str:
     return raw
 
 
-_CAPTION_PREFIX = "| unknown |"
+_CAPTION_PREFIX = ""
 
 
 def _apply_caption_prefix(prompt: str) -> str:
-    """为所有 caption 统一添加 '| unknown |' 前缀。"""
-    if not prompt:
-        return _CAPTION_PREFIX
-    return f"{_CAPTION_PREFIX} {prompt}"
+    """直接返回 prompt，不加前缀。"""
+    return prompt
 
 
 def _load_scene_presets() -> tuple[list[tuple[str, str]], list[str], list[str], int, str]:
@@ -188,19 +331,13 @@ def on_ref_gallery_select(evt: gr.SelectData):
     3) 若未在生成：立刻用选中图替换 gr.Image。
     """
     if not REF_IMAGE_PATHS or evt.index < 0 or evt.index >= len(REF_IMAGE_PATHS):
-        return gr.update(), gr.skip()
+        return gr.update(), gr.skip(), gr.skip()
 
     path = REF_IMAGE_PATHS[evt.index]
-    on_ref_image_update(path)
 
     prompt_val = PRESET_PROMPTS[evt.index] if evt.index < len(PRESET_PROMPTS) else gr.update()
 
-    if state.is_running:
-        state.is_running = False
-        state.waiting_for_new_frames = False
-        return prompt_val, gr.skip()
-
-    return prompt_val, gr.update(value=path)
+    return prompt_val, gr.update(value=path), path
 
 
 def on_video_gallery_select(evt: gr.SelectData):
@@ -231,19 +368,13 @@ def on_close_video_player():
 
 # ── F. Gradio Blocks UI 定义 ────────────────────────────────────────────────
 with gr.Blocks(title="ABot-World - 实时可交互世界模型") as demo:
+    ws_session_state = gr.State("")
+    ref_path_state = gr.State(
+        state.ref_image_path or DEFAULT_REF_IMAGE
+    )
     gr.Markdown(
         "# ABot-World - 实时可交互世界模型\n\n",
         elem_classes=["fe-header", "fe-header--intro-gap"],
-    )
-    # --- 键盘交互：隐藏 Textbox 供 JS 上报按键 ---
-    # Gradio：visible=False 时整块不挂载到 DOM，key_handler 无法找到 #key-state-input。
-    # visible="hidden" 不占版面但仍存在于 DOM，可与 .key-state-hidden 配合完全隐藏。
-    key_state_input = gr.Textbox(
-        value="",
-        elem_id="key-state-input",
-        visible="hidden",
-        label=None,
-        elem_classes=["key-state-hidden"],
     )
     # ── 主区：实时画面 ────────────────────────────────────────────────────────
     with gr.Column(elem_classes=["fe-video-wrap"]):
@@ -260,8 +391,10 @@ with gr.Blocks(title="ABot-World - 实时可交互世界模型") as demo:
             height=STREAM_HEIGHT,
             show_label=False,
             elem_classes=["fe-video-fixed"],
-            format="webp"
+            format="jpeg"
         )
+        # WebSocket canvas overlay 容器（由 JS 动态创建 canvas）
+        ws_html = gr.HTML("", visible=True, elem_id="ws-canvas-slot")
 
         # ── 进度条：frame 生成与播放进度 ──────────────────────────────────────────
         progress_bar = gr.HTML(
@@ -325,72 +458,177 @@ with gr.Blocks(title="ABot-World - 实时可交互世界模型") as demo:
     model_ready_timer = gr.Timer(2)
     model_ready_timer.tick(
         fn=check_model_ready_ui,
-        inputs=[],
-        outputs=[status_output, update_btn, overlay_label],
+        inputs=[ws_session_state],
+        outputs=[
+            status_output,
+            update_btn,
+            overlay_label,
+            model_ready_timer,
+        ],
+        queue=False,
     )
 
     # ── G. 事件绑定 ───────────────────────────────────────────────────────────
-    stream_event = update_btn.click(
-        fn=on_click_update_prompt,
-        inputs=[prompt_input],
-        outputs=[image_output, status_output, current_prompt_display, update_btn, overlay_label, progress_bar],
-    ).then(
-        fn=show_completion_toast,
-        inputs=[],
-        outputs=[],
+    # iframe+WebSocket 版：启动会话并返回画布 iframe。
+    update_btn.click(
+        fn=on_click_start_ws,
+        inputs=[prompt_input, ref_path_state],
+        outputs=[
+            ws_html,
+            status_output,
+            current_prompt_display,
+            update_btn,
+            overlay_label,
+            progress_bar,
+            image_output,
+            ws_session_state,
+        ],
+        queue=False,
     )
 
     ref_gallery.select(
         fn=on_ref_gallery_select,
         inputs=None,
-        outputs=[prompt_input, image_output],
-    )
-
-    stop_btn.click(
-        fn=on_stop,
-        outputs=[image_output, status_output, current_prompt_display, update_btn, overlay_label, progress_bar],
-        cancels=[stream_event],
-    )
-
-    key_state_input.input(
-        fn=on_key_update,
-        inputs=[key_state_input],
-        outputs=[],
+        outputs=[prompt_input, image_output, ref_path_state],
         queue=False,
     )
 
+    # iframe+WebSocket 版：Stop 按钮（同时恢复参考图）
+    stop_btn.click(
+        fn=on_stop_ws,
+        inputs=[ws_session_state, ref_path_state, prompt_input],
+        outputs=[
+            ws_html,
+            status_output,
+            current_prompt_display,
+            update_btn,
+            overlay_label,
+            progress_bar,
+            image_output,
+            ws_session_state,
+        ],
+        queue=False,
+    )
+
+    # 键盘 HUD 仅负责视觉；实时控制由 iframe 内的双向 WebSocket 发送，
+    # 不再触发高频 Gradio queue 回调。
+
 demo.queue(default_concurrency_limit=1)
 
-# ── H. Main 入口 + 启动 ─────────────────────────────────────────────────────
-if __name__ == "__main__":
-    if DEBUG_FRONTEND_ONLY:
-        state.model_ready = True
-    else:
-        def _load_pipeline_background():
-            """后台加载模型，完成后设置 state.model_ready，Timer 轮询会启用「唤醒你的世界」。"""
-            print("[INIT] Loading pipeline in background...")
+# ── H. 模型下载 + 后台加载 pipeline（模块级，import 时即启动）──────────────────
+_MODEL_ID = "amap_cvlab/ABot-World-0-5B-LF"
+_CHECKPOINT_DIR = PROJECT_ROOT / "checkpoints" / "ABot-World-0-5B-LF"
+_MODEL_CACHE_ROOT = Path(
+    os.environ.get("MODELSCOPE_CACHE", "/mnt/workspace/.cache/modelscope")
+)
+
+
+def _missing_checkpoint_assets() -> list[str]:
+    """Return missing/truncated assets required by the configured pipeline."""
+    required_files = {
+        "config.json": 32,
+        "diffusion_pytorch_model.safetensors": 1024 * 1024 * 1024,
+        "models_t5_umt5-xxl-enc-bf16.pth": 1024 * 1024 * 1024,
+        "Wan2.2_VAE.pth": 100 * 1024 * 1024,
+        "taew2_2.pth": 1024 * 1024,
+    }
+    missing = []
+    for relative_path, minimum_bytes in required_files.items():
+        path = _CHECKPOINT_DIR / relative_path
+        try:
+            if not path.is_file() or path.stat().st_size < minimum_bytes:
+                missing.append(relative_path)
+        except OSError:
+            missing.append(relative_path)
+
+    tokenizer_dir = _CHECKPOINT_DIR / "google" / "umt5-xxl"
+    try:
+        has_tokenizer_files = tokenizer_dir.is_dir() and any(
+            item.is_file() and item.stat().st_size > 0
+            for item in tokenizer_dir.rglob("*")
+        )
+    except OSError:
+        has_tokenizer_files = False
+    if not has_tokenizer_files:
+        missing.append("google/umt5-xxl/")
+    return missing
+
+
+def ensure_model_downloaded():
+    """从 ModelScope 下载模型检查点（如果尚未下载）。"""
+    import shutil
+    missing = _missing_checkpoint_assets()
+    if not missing:
+        print(f"[SETUP] Model already exists at {_CHECKPOINT_DIR}", flush=True)
+        return
+    print(
+        f"[SETUP] Downloading/repairing {_MODEL_ID}; "
+        f"missing_or_truncated={missing}",
+        flush=True,
+    )
+    from modelscope import snapshot_download
+    _MODEL_CACHE_ROOT.mkdir(parents=True, exist_ok=True)
+    model_dir = snapshot_download(_MODEL_ID, cache_dir=str(_MODEL_CACHE_ROOT))
+    print(f"[SETUP] Model downloaded to {model_dir}", flush=True)
+    _CHECKPOINT_DIR.parent.mkdir(parents=True, exist_ok=True)
+    if _CHECKPOINT_DIR.is_symlink():
+        _CHECKPOINT_DIR.unlink()
+    elif _CHECKPOINT_DIR.exists():
+        shutil.rmtree(_CHECKPOINT_DIR)
+    os.symlink(model_dir, str(_CHECKPOINT_DIR))
+    print(f"[SETUP] Symlinked {model_dir} -> {_CHECKPOINT_DIR}", flush=True)
+    missing = _missing_checkpoint_assets()
+    if missing:
+        raise RuntimeError(
+            f"ModelScope snapshot is incomplete after download: {missing}"
+        )
+
+
+if DEBUG_FRONTEND_ONLY:
+    state.model_ready = True
+else:
+    def _download_and_load_pipeline():
+        """后台线程：先下载模型，再加载 pipeline。"""
+        try:
+            if torch.cuda.is_available():
+                props = torch.cuda.get_device_properties(0)
+                print(
+                    "[BOOT][GPU] "
+                    f"name={props.name}, cc={props.major}.{props.minor}, "
+                    f"vram={props.total_memory / (1024 ** 3):.1f}GiB, "
+                    f"torch={torch.__version__}, cuda={torch.version.cuda}",
+                    flush=True,
+                )
+            ensure_model_downloaded()
+            print("[INIT] Loading pipeline in background...", flush=True)
             with _init_lock:
-                get_pipeline(
+                p, cfg, dev = get_pipeline(
                     vae_type=VAE_TYPE,
                     use_fp8_gemm=USE_FP8_GEMM,
                 )
-            state.model_ready = True
-            print("[INIT] Pipeline ready. 「唤醒你的世界」已可用。")
+            # 注入 pipeline 引用到 WebSocket worker。
+            from web_client import ws_stream
+            ws_stream.set_pipeline(p, cfg, dev)
+            print("[INIT] Pipeline injected into ws_stream.", flush=True)
+        except Exception as e:
+            state.model_error = f"{type(e).__name__}: {e}"
+            print(f"[INIT] Pipeline initialization failed: {state.model_error}", flush=True)
+            traceback.print_exc()
+            return
+        state.model_error = None
+        state.model_ready = True
+        print("[INIT] Pipeline ready. WebSocket streaming + 「唤醒你的世界」已可用。", flush=True)
 
-        threading.Thread(target=_load_pipeline_background, daemon=True).start()
-        print("[INIT] Web UI starting (model loads in background).")
+    threading.Thread(target=_download_and_load_pipeline, daemon=True).start()
+    print("[INIT] Web UI starting (model downloads & loads in background).", flush=True)
 
+
+# ── I. Main 入口 ─────────────────────────────────────────────────────────────
+if __name__ == "__main__":
     try:
         demo.launch(
             server_name=SERVER_NAME,
             server_port=SERVER_PORT,
-            share=os.environ.get("GRADIO_SHARE", "false").strip().lower() in ("1", "true", "yes"),
-            allowed_paths=[
-                str(_gradio_tmp.resolve()),
-                str(WEB_DIR.resolve()),
-                str((PROJECT_ROOT / "outputs").resolve()),
-                str(Path(os.environ.get("ABOT_OUTPUT_DIR", str(PROJECT_ROOT / "outputs"))).resolve()),
-            ],
             js=_KEY_HANDLER_JS,
             css=_COMBINED_CSS,
             footer_links=[],  # 隐藏 Gradio 默认页脚（API / Built with Gradio / 设置）
@@ -399,8 +637,6 @@ if __name__ == "__main__":
         pass
     finally:
         state.is_running = False
-        # 给 worker 线程最多 SHUTDOWN_GRACE_SECONDS 秒退出，超时后强制结束进程
-        # （GPU 推理线程无法被 interrupt，os._exit 是唯一可靠的退出方式）
         def _force_exit():
             time.sleep(SHUTDOWN_GRACE_SECONDS)
             os._exit(0)

@@ -62,6 +62,7 @@ class DynamicDiTQuantizer:
         include_patterns: Optional[List[Union[str, re.Pattern]]] = None,
         exclude_patterns: Optional[List[Union[str, re.Pattern]]] = None,
         native_fp8_support: Optional[bool] = None,
+        min_weight_numel: int = 0,
     ):
         QuantType.validate(quant_type)
         self.fp8_scales_map = {}
@@ -74,6 +75,7 @@ class DynamicDiTQuantizer:
             "txt",
         ]
         self.exclude_patterns = exclude_patterns or ["embed"]
+        self.min_weight_numel = max(0, int(min_weight_numel))
 
         # Configure layer filter function
         self.layer_filter = (
@@ -169,7 +171,11 @@ class DynamicDiTQuantizer:
         self.fp8_scales_map = load_fp8_scales(scale)
         converted_count = 0
         for name, module in tqdm.tqdm(list(model.named_modules()), desc="converting linear"):
-            if isinstance(module, torch.nn.Linear) and self.layer_filter(name):
+            if (
+                isinstance(module, torch.nn.Linear)
+                and self.layer_filter(name)
+                and module.weight.numel() >= self.min_weight_numel
+            ):
                 # Prefer $name.weight_scale, fallback to "$name" key if needed
                 s = self.fp8_scales_map.get(f"{name}.weight_scale") or self.fp8_scales_map.get(
                     name
@@ -197,7 +203,11 @@ class DynamicDiTQuantizer:
         named_modules = list(model.named_modules())
         converted_count = 0
         for name, module in tqdm.tqdm(named_modules, desc="converting linear"):
-            if isinstance(module, torch.nn.Linear) and self.layer_filter(name):
+            if (
+                isinstance(module, torch.nn.Linear)
+                and self.layer_filter(name)
+                and module.weight.numel() >= self.min_weight_numel
+            ):
                 quantized = self._quantize_linear_weight(module)
                 if self.quant_type in (
                     QuantType.NVFP4,

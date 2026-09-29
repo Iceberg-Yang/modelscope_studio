@@ -92,6 +92,11 @@ class CausalInferencePipeline(torch.nn.Module):
         self.num_input_frames = 0
         self._stream_block_diffusion_times: List[float] = []
         self._stream_block_decode_times: List[float] = []
+        self._stream_block_postprocess_times: List[float] = []
+        self._pending_diffusion_events = None
+        self._cached_action_signature = None
+        self._cached_act_context = None
+        self._stream_timestep_cache = {}
 
         print(f"KV inference with {self.num_frame_per_block} frames per block")
 
@@ -104,6 +109,22 @@ class CausalInferencePipeline(torch.nn.Module):
         model = getattr(self.generator, "model", None)
         if model is not None and hasattr(model, "clear_cache"):
             model.clear_cache()
+
+    def _cached_stream_timestep(self, value, shape, device):
+        """Reuse immutable CUDA timestep tensors across streaming blocks."""
+        int_value = int(value)
+        shape = tuple(int(v) for v in shape)
+        key = (int_value, shape, str(device))
+        cached = self._stream_timestep_cache.get(key)
+        if cached is None:
+            cached = torch.full(
+                shape,
+                int_value,
+                dtype=torch.int64,
+                device=device,
+            )
+            self._stream_timestep_cache[key] = cached
+        return cached
 
     def _decode_output_to_video(self, output: torch.Tensor) -> torch.Tensor:
         self._clear_generation_caches()
@@ -288,15 +309,35 @@ class CausalInferencePipeline(torch.nn.Module):
         """
         if self.conditional_dict is None:
             raise RuntimeError("call set_prompts first")
+        dev = device or self.device
         key_order = ['W', 'A', 'S', 'D', 'I', 'J', 'K', 'L']
         action_list = [1 if keys_dict.get(k, False) else 0 for k in key_order]
-        action = torch.tensor(action_list, dtype=torch.float32, device=device).unsqueeze(0)
-        control_action_latents = action[:, None, None, :].repeat(1, height, width, 1).permute([3, 0, 1, 2]).unsqueeze(0).to(device=device, dtype=torch.bfloat16) #f,h,w,8 --> 1,8,f,h,w, ([1, 8, 1, 480, 832])
+        signature = (
+            tuple(action_list),
+            int(height),
+            int(width),
+            int(num_frames),
+            str(dev),
+        )
+        if (
+            signature == self._cached_action_signature
+            and self._cached_act_context is not None
+        ):
+            self.conditional_dict["act_context"] = self._cached_act_context
+            return
+
+        action = torch.tensor(
+            action_list,
+            dtype=torch.float32,
+            device=dev,
+        ).unsqueeze(0)
+        control_action_latents = action[:, None, None, :].repeat(1, height, width, 1).permute([3, 0, 1, 2]).unsqueeze(0).to(device=dev, dtype=torch.bfloat16) #f,h,w,8 --> 1,8,f,h,w, ([1, 8, 1, 480, 832])
         # repeat control_action_latents to num_frames
         control_action_latents = control_action_latents.repeat_interleave(4, dim=1)  # [1, 8*4, 1, 480, 832]
         control_action_latents = control_action_latents.repeat(1, 1, num_frames, 1, 1)  # [1, 8*4, F, 480, 832]
+        self._cached_action_signature = signature
+        self._cached_act_context = control_action_latents
         self.conditional_dict["act_context"] = control_action_latents
-        print(f'action_list, {action_list}')
 
 
     def reset_stream(self, batch_size: int, dtype, device, initial_latent=None):
@@ -313,13 +354,19 @@ class CausalInferencePipeline(torch.nn.Module):
                 self.crossattn_cache[b]["is_init"] = False
             # reset kv cache indices
             for b in range(len(self.kv_cache1)):
-                self.kv_cache1[b]["global_end_index"].fill_(0)
-                self.kv_cache1[b]["local_end_index"].fill_(0)
+                # Cache positions are host-side control-flow metadata. Keeping
+                # them as Python integers avoids a CUDA -> CPU synchronization
+                # in every transformer layer whenever .item() is called.
+                self.kv_cache1[b]["global_end_index"] = 0
+                self.kv_cache1[b]["local_end_index"] = 0
+                self.kv_cache1[b]["ref_token_len"] = 0
 
         self.current_start_frame = 0
         self.num_input_frames = initial_latent.shape[1] if initial_latent is not None else 0
         self._stream_block_diffusion_times = []
         self._stream_block_decode_times = []
+        self._stream_block_postprocess_times = []
+        self._pending_diffusion_events = None
 
 
     @torch.no_grad()
@@ -328,18 +375,11 @@ class CausalInferencePipeline(torch.nn.Module):
         noise_block: [B, F, C, H, W]，其中 F=1 或 num_frame_per_block
         return denoised_pred: [B, F, C, H, W] on GPU
         """
-        t0 = time.perf_counter()
+        diffusion_start = torch.cuda.Event(enable_timing=True)
+        diffusion_end = torch.cuda.Event(enable_timing=True)
+        diffusion_start.record()
         B, F, C, H, W = noise_block.shape
         noisy_input = noise_block
-
-        y = self.conditional_dict.get("y", None)
-        if y is not None:
-            y = y.clone()
-
-        action_context = self.conditional_dict.get("act_context", None)
-        if action_context is not None:
-            action_context = action_context.clone()
-            _, Ca, _, Ha, Wa = action_context.shape
 
         first_frame_latents = self.conditional_dict.get("first_frame_latents", None)
         replace_first = (self.current_start_frame - self.num_input_frames == 0) and (first_frame_latents is not None)
@@ -349,6 +389,13 @@ class CausalInferencePipeline(torch.nn.Module):
 
         #Pyramid denoising
         if self.pyramid_sample_ratio is not None:
+            # These references are only needed to reconstruct conditions at
+            # successive pyramid scales. Normal streaming must not clone the
+            # large y/act_context tensors once per block.
+            y = self.conditional_dict.get("y", None)
+            action_context = self.conditional_dict.get("act_context", None)
+            if action_context is not None:
+                _, Ca, _, Ha, Wa = action_context.shape
             assert len(self.pyramid_sample_ratio) == len(self.denoising_step_list)
             noisy_input = noisy_input.reshape(B, F*C, H, W)
             noisy_input = Functional.interpolate(noisy_input, scale_factor=self.pyramid_sample_ratio[0], mode='nearest')
@@ -358,18 +405,23 @@ class CausalInferencePipeline(torch.nn.Module):
                 cur_y = y.reshape(B, C*F, H, W)
                 cur_y = Functional.interpolate(cur_y, scale_factor=self.pyramid_sample_ratio[0], mode='nearest')
                 cur_y = cur_y.reshape(B, C, F, int(H*self.pyramid_sample_ratio[0]), int(W*self.pyramid_sample_ratio[0]))
-                self.conditional_dict["y"] = cur_y.clone()
+                self.conditional_dict["y"] = cur_y
 
             if action_context is not None:
                 cur_action_context = action_context.reshape(B, Ca*F, Ha, Wa)
                 cur_action_context = Functional.interpolate(cur_action_context, scale_factor=self.pyramid_sample_ratio[0], mode='nearest')
                 cur_action_context = cur_action_context.reshape(B, Ca, F, int(Ha*self.pyramid_sample_ratio[0]), int(Wa*self.pyramid_sample_ratio[0]))
-                self.conditional_dict["act_context"] = cur_action_context.clone()
+                self.conditional_dict["act_context"] = cur_action_context
 
 
         for index, current_timestep in enumerate(self.denoising_step_list):
-            timestep = torch.ones([B, F], device=noise_block.device, dtype=torch.int64) * current_timestep
+            timestep = self._cached_stream_timestep(
+                current_timestep,
+                (B, F),
+                noise_block.device,
+            )
             if replace_first:
+                timestep = timestep.clone()
                 timestep[:, 0] = 0
 
             if self.pyramid_sample_ratio is not None:
@@ -404,12 +456,16 @@ class CausalInferencePipeline(torch.nn.Module):
                         scale = math.prod(self.pyramid_sample_ratio[:index+2])
                         cur_action_context = Functional.interpolate(cur_action_context, scale_factor=scale, mode='nearest')
                         cur_action_context = cur_action_context.reshape(B, Ca, F, int(Ha*scale), int(Wa*scale))
-                        self.conditional_dict["act_context"] = cur_action_context.clone()
+                        self.conditional_dict["act_context"] = cur_action_context
 
                 noisy_input = self.scheduler.add_noise(
                     denoised_pred.flatten(0, 1),
                     torch.randn_like(denoised_pred.flatten(0, 1)),
-                    next_timestep * torch.ones([B * F], device=noise_block.device, dtype=torch.long),
+                    self._cached_stream_timestep(
+                        next_timestep,
+                        (B * F,),
+                        noise_block.device,
+                    ),
                 ).unflatten(0, denoised_pred.shape[:2])
             else:
                 noisy_input = denoised_pred
@@ -418,7 +474,11 @@ class CausalInferencePipeline(torch.nn.Module):
                 noisy_input[:, 0:1] = first_frame_latents
 
         # 用干净 context 更新 KV cache
-        context_timestep = torch.ones([B, F], device=noise_block.device, dtype=torch.int64) * self.args.context_noise
+        context_timestep = self._cached_stream_timestep(
+            self.args.context_noise,
+            (B, F),
+            noise_block.device,
+        )
         if replace_first:
             context_timestep = context_timestep.clone()
             context_timestep[:, 0] = 0
@@ -436,25 +496,52 @@ class CausalInferencePipeline(torch.nn.Module):
 
         self.current_start_frame += F
 
-        torch.cuda.synchronize()
-        block_diffusion_s = time.perf_counter() - t0
-        self._stream_block_diffusion_times.append(block_diffusion_s)
+        # Do not synchronize here. The following VAE decode is on the same CUDA
+        # stream and can be submitted immediately. Its CPU frame transfer is
+        # the natural synchronization point where both event pairs are read.
+        diffusion_end.record()
+        self._pending_diffusion_events = (diffusion_start, diffusion_end)
 
         return noisy_input
     
     @torch.no_grad()
     def decode_block_and_write(self, latents_block: torch.Tensor, writer):
         # latents_block: [B,F,C,H,W] on GPU
-        t0 = time.perf_counter()
-        vid = self.vae.decode_to_pixel(latents_block, use_cache=True, return_in_cpu=True)
-        torch.cuda.synchronize()
-        block_decode_s = time.perf_counter() - t0
-        self._stream_block_decode_times.append(block_decode_s)
+        decode_start = torch.cuda.Event(enable_timing=True)
+        decode_end = torch.cuda.Event(enable_timing=True)
+        decode_start.record()
+        vid = self.vae.decode_to_pixel(
+            latents_block,
+            use_cache=True,
+            return_in_cpu=False,
+        )
+        decode_end.record()
 
-        vid = (vid * 0.5 + 0.5).clamp(0, 1)
-        # print('decode_block_and_write: ', latents_block.shape, vid.shape) # [1, 3, 16, 60, 104]) torch.Size([1, 12, 3, 480, 832])
-        frames = (vid[0].permute(0,2,3,1) * 255.0).clamp(0,255).to(torch.uint8).numpy()
-        for f in frames:
+        post_t0 = time.perf_counter()
+        frames = (
+            (vid * 0.5 + 0.5)
+            .mul_(255.0)
+            .clamp_(0, 255)
+            .to(torch.uint8)
+            .permute(0, 1, 3, 4, 2)
+            .contiguous()
+            .cpu()
+            .numpy()
+        )
+        pending_diffusion = self._pending_diffusion_events
+        if pending_diffusion is not None:
+            diffusion_start, diffusion_end = pending_diffusion
+            block_diffusion_s = (
+                diffusion_start.elapsed_time(diffusion_end) / 1000.0
+            )
+            self._stream_block_diffusion_times.append(block_diffusion_s)
+            self._pending_diffusion_events = None
+        block_decode_s = decode_start.elapsed_time(decode_end) / 1000.0
+        block_postprocess_s = time.perf_counter() - post_t0
+        self._stream_block_decode_times.append(block_decode_s)
+        self._stream_block_postprocess_times.append(block_postprocess_s)
+
+        for f in frames[0]:
             writer.append_data(f)
     
     def inference(
@@ -549,12 +636,9 @@ class CausalInferencePipeline(torch.nn.Module):
                 self.crossattn_cache[block_index]["is_init"] = False
             # reset kv cache
             for block_index in range(len(self.kv_cache1)):
-                self.kv_cache1[block_index]["global_end_index"] = torch.tensor(
-                    [0], dtype=torch.long, device=noise.device)
-                self.kv_cache1[block_index]["local_end_index"] = torch.tensor(
-                    [0], dtype=torch.long, device=noise.device)
-                self.kv_cache1[block_index]["ref_token_len"] = torch.tensor(
-                    [0], dtype=torch.long, device=noise.device)
+                self.kv_cache1[block_index]["global_end_index"] = 0
+                self.kv_cache1[block_index]["local_end_index"] = 0
+                self.kv_cache1[block_index]["ref_token_len"] = 0
 
         # Step 2: Cache context feature
         current_start_frame = 0
@@ -796,9 +880,11 @@ class CausalInferencePipeline(torch.nn.Module):
             kv_cache1.append({
                 "k": torch.zeros([batch_size, kv_cache_size, num_heads, head_dim], dtype=dtype, device=device),
                 "v": torch.zeros([batch_size, kv_cache_size, num_heads, head_dim], dtype=dtype, device=device),
-                "global_end_index": torch.tensor([0], dtype=torch.long, device=device),
-                "local_end_index": torch.tensor([0], dtype=torch.long, device=device),
-                "ref_token_len": torch.tensor([0], dtype=torch.long, device=device),
+                # These values are only used for Python slicing/control flow;
+                # CUDA tensors force a device synchronization on every .item().
+                "global_end_index": 0,
+                "local_end_index": 0,
+                "ref_token_len": 0,
             })
 
         self.kv_cache1 = kv_cache1  # always store the clean cache

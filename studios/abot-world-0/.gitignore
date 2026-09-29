@@ -2,10 +2,6 @@
 __pycache__/
 *.py[codz]
 *$py.class
-.gradio_cache/
-checkpoints/
-outputs/*.mp4
-outputs/*.png
 .vscode/
 
 # C extensions

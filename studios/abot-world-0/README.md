@@ -1,85 +1,70 @@
 ---
-title: ABot-World A10
+title: ABot-World L20N
 sdk: docker
 ---
 
-# ABot-World-0 ModelScope Studio
+# ABot-World-0
 
-基于 ABot-World-0-5B-LF 的动作可控交互式世界模型 Demo，可从单张场景图开始，按键驱动连续视频生成。
+基于 ABot-World-0-5B-LF 的动作可控交互式世界模型创空间。应用从单张场景图开始持续生成视频，并通过键盘动作实时控制移动和视角。
 
-| 资源 | 地址 |
-|---|---|
-| 在线体验 | [ModelScope Studio](https://modelscope.cn/studios/amap_cvlab/abot-world-0) |
-| 模型 | [amap_cvlab/ABot-World-0-5B-LF](https://modelscope.cn/models/amap_cvlab/ABot-World-0-5B-LF) |
+[在线体验](https://modelscope.cn/studios/amap_cvlab/abot-world-0) · [模型权重](https://modelscope.cn/models/amap_cvlab/ABot-World-0-5B-LF)
 
-## 功能
-
-- 以上传图片或内置场景作为首帧，持续生成可探索的动态世界。
-- 通过 W/A/S/D 控制移动，通过 I/J/K/L 控制视角，并在生成过程中动态提交动作。
-- 使用 LongForcing 模型进行开放式 rollout，分块解码并实时更新画面。
-- 保存生成视频，维护参考图缓存和最近结果列表。
-
-## 推理方案
+## 推理流程
 
 ```text
-首帧 + 文本场景描述 + 键盘动作
-                 │
-                 v
-      UMT5-XXL Text Encoder + Reference Encoder
-                 │ text / image / action conditions
-                 v
- ABot-World-0-5B-LF Causal DiT（4-step DMD, block rollout）
-                 │ latent blocks
-                 v
-       Wan2.2 VAE / TAE 解码 ─> 流式帧 ─> H.264 MP4
+首帧 + 场景描述 + W/A/S/D 与 I/J/K/L 动作
+  └─ UMT5-XXL 文本编码 + 参考图像编码
+      └─ ABot-World Causal DiT
+          └─ LongForcing + 4-step DMD 分块生成
+              └─ Wan2.2 VAE / TAE 流式解码
+                  └─ WebSocket JPEG 帧流 + 视频输出
 ```
 
-1. 首帧缩放至参考分辨率并编码，文本由 BF16 UMT5-XXL 转换为条件向量。
-2. 前端将互斥键组归一化为动作序列，推理 worker 在每个 causal block 读取最新控制状态。
-3. LongForcing 配置使用 1000/750/500/250 四个去噪时间步、局部注意力窗口 21 和相对 RoPE。
-4. 模型每个 latent block 生成 3 帧 latent；解码后标准输出 12 帧，首块包含参考帧并输出 9 帧。
-5. UI 按设定 stride 抽样显示预览，完整帧以 12 FPS 编码为 H.264 视频。
+1. 启动器检测实际 GPU、显存和 Compute Capability，并对 L20N 的 CC 12.0 运行环境执行门禁检查。
+2. 首帧和文本形成参考条件，浏览器持续提交互斥的移动与视角动作。
+3. Causal DiT 采用 LongForcing，以 `1000/750/500/250` 四个时间步逐块扩展潜变量序列。
+4. 默认使用 FP8 per-token Linear；自注意力在 SageAttention2 与 FlashAttention2 之间根据实测结果自动选择。
+5. VAE/TAE 将每个生成块解码为画面，经有界队列和 WebSocket 发送到浏览器，并保留完整视频结果。
 
-## 技术细节
+## 技术要点
 
 | 项目 | 配置 |
 |---|---|
-| 主模型 | ABot-World-0-5B-LF，causal image-to-video / action-conditioned world model |
-| 推理框架 | PyTorch + 自定义 CausalInferencePipeline + Gradio |
-| 文本编码 | UMT5-XXL BF16 |
-| 生成策略 | LongForcing + 4-step DMD + block-wise causal rollout |
-| 注意力 | local attention size 21、relative RoPE；A10 路径使用 FlashAttention 2 |
-| 精度 | A10 Studio 使用 BF16；禁用 Blackwell 专用 FP8 GEMM/SageAttention3 路径 |
-| Studio 分辨率 | 默认 480×832；latent 为 48×30×52 |
-| 视频输出 | 12 FPS、H.264；UI 默认每 3 帧刷新一次 |
-| 内存策略 | 低于 40 GB 空闲显存时对文本编码器与 VAE 启用动态交换 |
-| 持久化 | checkpoint 位于 `/mnt/workspace/checkpoints`，输出位于 `/mnt/workspace/outputs` |
+| 主模型 | `amap_cvlab/ABot-World-0-5B-LF`，动作条件 Causal DiT |
+| 生成策略 | LongForcing · 4-step DMD · block-wise causal rollout |
+| 运行硬件 | L20N 部署配置，启动时验证 CC 12.0 和 CUDA 扩展可用性 |
+| 精度与量化 | 默认动态 FP8 per-token GEMM；保留 BF16 与 Hybrid A/B 模式 |
+| 注意力 | FlashAttention2 SM120；SageAttention2 在实际 GPU 上编译并持久化缓存 |
+| 默认分辨率 | `704 × 1280`，保持五个参考槽位和每块生成结构 |
+| 流式链路 | FastAPI + Gradio + 二进制 WebSocket；自适应 10/11/12 FPS 播放与追帧 |
+| 并发策略 | 单 GPU FIFO 会话租约，断开或停止后在当前推理块结束时释放 GPU |
+| 运行诊断 | `/healthz` 暴露硬件、扩展和模型状态；`/metrics` 记录阶段耗时与生成 FPS |
+| 持久化 | 模型缓存、SageAttention/Triton 编译产物和输出位于 `/mnt/workspace` |
 
-## 目录结构
+## 目录
 
 ```text
-abot-world-0/
-├── studio_app.py       # ModelScope checkpoint 下载与 Docker 入口
-├── web_client/         # Gradio UI、动作状态、流式推理与视频写入
-├── pipeline/           # causal block 推理主流程
-├── wan/                # DiT、VAE、文本编码和 CUDA/Triton 组件
-├── quantizer/          # 可选 FP8 量化实现
-├── configs/            # LongForcing 与默认模型配置
-└── Dockerfile          # CUDA 12.8 / PyTorch 2.10 A10 镜像
+.
+├── entrypoint_l20n.py       # L20N 运行时门禁与服务启动
+├── app.py                   # FastAPI、Gradio 和 WebSocket 入口
+├── web_client/              # UI、会话调度、流式推理与指标
+├── pipeline/                # Causal DiT 分块推理流程
+├── wan/                     # 模型、VAE/TAE 与注意力实现
+├── quantizer/               # FP8/Hybrid 量化实现
+├── third_party/SageAttention/ # 随运行环境编译的注意力内核
+├── scripts/                 # L20N 启动检查与传输策略验证
+├── DEPLOY_L20N.md           # 部署参数和验收说明
+└── Dockerfile               # CUDA 12.8 / PyTorch 2.10 镜像
 ```
 
 ## 本地运行
 
-Docker Studio 路径建议使用 NVIDIA GPU、CUDA 12.8 和可用的持久化目录：
+该镜像针对已经验证的 L20N CC 12.0 环境构建；默认开启严格启动门禁，不会在扩展不可用时静默降级。
 
 ```bash
-docker build -t abot-world-studio .
+docker build -t abot-world-l20n .
 docker run --gpus all -p 7860:7860 \
-  -v "$PWD/workspace:/mnt/workspace" abot-world-studio
+  -v "$PWD/workspace:/mnt/workspace" abot-world-l20n
 ```
 
-也可按 `requirements.txt` 安装完整环境后运行 `bash web_client/run.sh`。`ABOT_STREAM_HEIGHT`、`ABOT_STREAM_WIDTH` 和 `ABOT_UI_FRAME_STRIDE` 可调整 Studio 输出与预览频率。
-
-## ModelScope 部署
-
-创空间使用 Docker SDK，入口为 `studio_app.py`。容器首次启动会从 ModelScope 下载 checkpoint 并链接至项目目录；服务监听 `0.0.0.0:7860`。
+服务监听 `0.0.0.0:7860`。详细的运行时验证、注意力选择、量化 A/B 和流式参数见 `DEPLOY_L20N.md`。

@@ -1,14 +1,7 @@
 /* web_client/key_hud.css — WASD / IJKL：按键黑框 + 主霓虹青外光晕；标题等仍用强调色 */
 
 /* Hidden textbox bridge — keeps Gradio element invisible */
-.key-state-hidden {
-    position: absolute !important;
-    width: 1px !important;
-    height: 1px !important;
-    opacity: 0 !important;
-    overflow: hidden !important;
-    pointer-events: none !important;
-}
+.key-state-hidden { display: none !important; }
 
 /* ══════════════════════════════════════════════════════════════════════════════
    §1  HUD CSS VARIABLES

@@ -17,16 +17,28 @@ from typing import Optional, Tuple
 import torch
 
 from ..kernels.python.gemm import fp8_gemm_triton_block
-from lightx2v_kernel.gemm import (
-    cutlass_scaled_mxfp4_mm,
-    cutlass_scaled_mxfp6_mxfp8_mm,
-    cutlass_scaled_mxfp8_mm,
-    cutlass_scaled_nvfp4_mm,
-    scaled_mxfp4_quant,
-    scaled_mxfp6_quant,
-    scaled_mxfp8_quant,
-    scaled_nvfp4_quant,
-)
+try:
+    from lightx2v_kernel.gemm import (
+        cutlass_scaled_mxfp4_mm,
+        cutlass_scaled_mxfp6_mxfp8_mm,
+        cutlass_scaled_mxfp8_mm,
+        cutlass_scaled_nvfp4_mm,
+        scaled_mxfp4_quant,
+        scaled_mxfp6_quant,
+        scaled_mxfp8_quant,
+        scaled_nvfp4_quant,
+    )
+except ImportError:
+    # The L20N profile uses E4M3 FP8 per-token GEMM through torch._scaled_mm.
+    # LightX2V is only required by the separate NVFP4/MXFP* modes.
+    cutlass_scaled_mxfp4_mm = None
+    cutlass_scaled_mxfp6_mxfp8_mm = None
+    cutlass_scaled_mxfp8_mm = None
+    cutlass_scaled_nvfp4_mm = None
+    scaled_mxfp4_quant = None
+    scaled_mxfp6_quant = None
+    scaled_mxfp8_quant = None
+    scaled_nvfp4_quant = None
 from ..kernels.python.quantizers import (
     fp8_per_block_quant_triton,
     fp8_per_token_group_quant_triton,
@@ -35,6 +47,15 @@ from .utils import QuantType, _ensure_deep_gemm, _ensure_sgl_kernel
 
 FP8_MAX = float(torch.finfo(torch.float8_e4m3fn).max)
 FP8_MIN = float(torch.finfo(torch.float8_e4m3fn).min)
+
+
+def _require_lightx2v(operation):
+    if operation is None:
+        raise ImportError(
+            "This NVFP4/MXFP mode requires lightx2v_kernel; "
+            "the L20N fp8-per-token profile does not."
+        )
+    return operation
 
 
 # quant function for per-tensor fp8
@@ -154,7 +175,7 @@ def nvfp4_per_tensor_quant(
     else:
         input_global_scale = input_global_scale.to(device=x.device, dtype=torch.float32)
 
-    qx, qscale = scaled_nvfp4_quant(x, input_global_scale)
+    qx, qscale = _require_lightx2v(scaled_nvfp4_quant)(x, input_global_scale)
     return qx, qscale, input_global_scale
 
 
@@ -169,7 +190,7 @@ def mxfp4_per_tensor_quant(
     if x.dim() != 2:
         raise ValueError(f"mxfp4_per_tensor_quant expects 2D tensor, but got shape={tuple(x.shape)}")
 
-    qx, qscale = scaled_mxfp4_quant(x)
+    qx, qscale = _require_lightx2v(scaled_mxfp4_quant)(x)
     # Keep a compatible triplet return signature with NVFP4 paths.
     input_global_scale = torch.tensor(1.0, device=x.device, dtype=torch.float32)
     return qx, qscale, input_global_scale
@@ -186,7 +207,7 @@ def mxfp6_per_tensor_quant(
     if x.dim() != 2:
         raise ValueError(f"mxfp6_per_tensor_quant expects 2D tensor, but got shape={tuple(x.shape)}")
 
-    qx, qscale = scaled_mxfp6_quant(x)
+    qx, qscale = _require_lightx2v(scaled_mxfp6_quant)(x)
     input_global_scale = torch.tensor(1.0, device=x.device, dtype=torch.float32)
     return qx, qscale, input_global_scale
 
@@ -202,7 +223,7 @@ def mxfp8_per_tensor_quant(
     if x.dim() != 2:
         raise ValueError(f"mxfp8_per_tensor_quant expects 2D tensor, but got shape={tuple(x.shape)}")
 
-    qx, qscale = scaled_mxfp8_quant(x)
+    qx, qscale = _require_lightx2v(scaled_mxfp8_quant)(x)
     input_global_scale = torch.tensor(1.0, device=x.device, dtype=torch.float32)
     return qx, qscale, input_global_scale
 

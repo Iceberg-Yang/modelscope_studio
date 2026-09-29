@@ -54,6 +54,22 @@ def _dbg_block_mask(mask):
         return f"<BlockMask repr failed: {e}>"
 
 
+def _cache_host_int(cache, key, default=0):
+    """Read KV-cache control metadata without synchronizing in the normal path.
+
+    New caches store indices as Python integers. Tensor support is retained for
+    old/offline callers, but it should not be exercised by streaming inference.
+    """
+    value = cache.get(key, default)
+    if torch.is_tensor(value):
+        return int(value.item())
+    return int(value)
+
+
+def _set_cache_host_int(cache, key, value):
+    cache[key] = int(value)
+
+
 def _is_checkpoint_stop_signal(err: BaseException) -> bool:
     """gradient checkpoint 重算时使用的内部控制流，不是真实错误；勿打印 DEBUG failed。"""
     return type(err).__name__ == "_StopRecomputationError"
@@ -667,7 +683,10 @@ class CausalWanSelfAttention(nn.Module):
                     )
         else:
             try:
-                frame_seqlen = int(math.prod(grid_sizes[0][1:]).item())
+                frame_seqlen = int(
+                    getattr(self, "_frame_seqlen", 0)
+                    or math.prod(grid_sizes[0][1:].tolist())
+                )
                 ref_token_len = int(getattr(self, "_num_ref_tokens", 0) or 0)
                 query_ref_token_len = int(getattr(self, "_query_ref_token_len", 0) or 0)
                 video_token_len = q.shape[1] - query_ref_token_len
@@ -680,10 +699,8 @@ class CausalWanSelfAttention(nn.Module):
                     "grid": getattr(self, "_ref_grid_sizes", None),
                 }
                 if "ref_token_len" not in kv_cache:
-                    kv_cache["ref_token_len"] = torch.tensor(
-                        [0], dtype=torch.long, device=q.device
-                    )
-                kv_cache["ref_token_len"].fill_(ref_token_len)
+                    kv_cache["ref_token_len"] = 0
+                _set_cache_host_int(kv_cache, "ref_token_len", ref_token_len)
                 sink_tokens = ref_token_len + self.sink_size * frame_seqlen
                 kv_cache_size = kv_cache["k"].shape[1]
                 cache_current_start = current_start + ref_token_len
@@ -703,13 +720,15 @@ class CausalWanSelfAttention(nn.Module):
                         kv_cache["rel_rope_base_frame"] = 0
                     # Reset the rope base at the start of a new stream (reset_stream
                     # zeroes global_end_index but reuses the cache tensors).
-                    if fast_rel and int(kv_cache["global_end_index"].item()) == 0:
+                    global_end_index = _cache_host_int(kv_cache, "global_end_index")
+                    local_end_index_prev = _cache_host_int(kv_cache, "local_end_index")
+                    if fast_rel and global_end_index == 0:
                         kv_cache["rel_rope_base_frame"] = 0
 
-                    if self.local_attn_size != -1 and (cache_current_end > kv_cache["global_end_index"].item()) and (
-                            video_token_len + kv_cache["local_end_index"].item() > kv_cache_size):
-                        num_evicted_tokens = video_token_len + kv_cache["local_end_index"].item() - kv_cache_size
-                        num_rolled_tokens = kv_cache["local_end_index"].item() - num_evicted_tokens - sink_tokens
+                    if self.local_attn_size != -1 and (cache_current_end > global_end_index) and (
+                            video_token_len + local_end_index_prev > kv_cache_size):
+                        num_evicted_tokens = video_token_len + local_end_index_prev - kv_cache_size
+                        num_rolled_tokens = local_end_index_prev - num_evicted_tokens - sink_tokens
 
                         if num_evicted_tokens < 0 or num_rolled_tokens < 0:
                             _dbg_print(
@@ -741,11 +760,12 @@ class CausalWanSelfAttention(nn.Module):
                                 kv_cache["k_roped"][:,
                                 sink_tokens + num_evicted_tokens:sink_tokens + num_evicted_tokens + num_rolled_tokens].clone()
 
-                        local_end_index = kv_cache["local_end_index"].item() + cache_current_end - \
-                                          kv_cache["global_end_index"].item() - num_evicted_tokens
+                        local_end_index = local_end_index_prev + cache_current_end - \
+                                          global_end_index - num_evicted_tokens
                     else:
-                        local_end_index = kv_cache["local_end_index"].item() + cache_current_end - kv_cache[
-                            "global_end_index"].item()
+                        local_end_index = (
+                            local_end_index_prev + cache_current_end - global_end_index
+                        )
                     local_start_index = local_end_index - video_token_len
 
                     if local_start_index < sink_tokens or local_end_index > kv_cache["k_raw"].shape[1]:
@@ -1001,8 +1021,8 @@ class CausalWanSelfAttention(nn.Module):
 
                         x = attention(roped_query, attn_k, attn_v)
 
-                    kv_cache["global_end_index"].fill_(cache_current_end)
-                    kv_cache["local_end_index"].fill_(local_end_index)
+                    _set_cache_host_int(kv_cache, "global_end_index", cache_current_end)
+                    _set_cache_host_int(kv_cache, "local_end_index", local_end_index)
                 else:
                     current_start_frame = current_start // frame_seqlen
 
@@ -1042,10 +1062,12 @@ class CausalWanSelfAttention(nn.Module):
 
                     num_new_tokens = roped_query.shape[1]
 
-                    if self.local_attn_size != -1 and (cache_current_end > kv_cache["global_end_index"].item()) and (
-                            num_new_tokens + kv_cache["local_end_index"].item() > kv_cache_size):
-                        num_evicted_tokens = num_new_tokens + kv_cache["local_end_index"].item() - kv_cache_size
-                        num_rolled_tokens = kv_cache["local_end_index"].item() - num_evicted_tokens - sink_tokens
+                    global_end_index = _cache_host_int(kv_cache, "global_end_index")
+                    local_end_index_prev = _cache_host_int(kv_cache, "local_end_index")
+                    if self.local_attn_size != -1 and (cache_current_end > global_end_index) and (
+                            num_new_tokens + local_end_index_prev > kv_cache_size):
+                        num_evicted_tokens = num_new_tokens + local_end_index_prev - kv_cache_size
+                        num_rolled_tokens = local_end_index_prev - num_evicted_tokens - sink_tokens
 
                         if num_evicted_tokens < 0 or num_rolled_tokens < 0:
                             _dbg_print(
@@ -1078,12 +1100,13 @@ class CausalWanSelfAttention(nn.Module):
                             kv_cache["v"][:,
                             sink_tokens + num_evicted_tokens:sink_tokens + num_evicted_tokens + num_rolled_tokens].clone()
 
-                        local_end_index = kv_cache["local_end_index"].item() + cache_current_end - \
-                                          kv_cache["global_end_index"].item() - num_evicted_tokens
+                        local_end_index = local_end_index_prev + cache_current_end - \
+                                          global_end_index - num_evicted_tokens
                         local_start_index = local_end_index - num_new_tokens
                     else:
-                        local_end_index = kv_cache["local_end_index"].item() + cache_current_end - kv_cache[
-                            "global_end_index"].item()
+                        local_end_index = (
+                            local_end_index_prev + cache_current_end - global_end_index
+                        )
                         local_start_index = local_end_index - num_new_tokens
 
                     # 只在即将越界时打印；正常路径无输出。
@@ -1130,8 +1153,8 @@ class CausalWanSelfAttention(nn.Module):
                         attn_k = kv_cache["k"][:, :local_end_index]
                         attn_v = kv_cache["v"][:, :local_end_index]
                     x = attention(roped_query, attn_k, attn_v)
-                    kv_cache["global_end_index"].fill_(cache_current_end)
-                    kv_cache["local_end_index"].fill_(local_end_index)
+                    _set_cache_host_int(kv_cache, "global_end_index", cache_current_end)
+                    _set_cache_host_int(kv_cache, "local_end_index", local_end_index)
             except Exception as e:
                 if _is_checkpoint_stop_signal(e):
                     raise
@@ -1564,6 +1587,7 @@ class CausalWanModel(ModelMixin, ConfigMixin):
         self.block_mask: BlockMask | None = None
         self._block_mask_cache_key = None
         self._block_mask_cache = {}
+        self._inference_metadata_cache = {}
         self.num_frame_per_block = num_frame_per_block
         self.independent_first_frame = False
 
@@ -2165,12 +2189,24 @@ class CausalWanModel(ModelMixin, ConfigMixin):
             act_context_scale=act_context_scale,
         )
 
-        grid_sizes = torch.stack(
-            [torch.tensor(u.shape[2:], dtype=torch.long, device=device) for u in x]
-        )
+        grid_shapes = [tuple(int(v) for v in u.shape[2:]) for u in x]
+        frame_seqlen = int(grid_shapes[0][1] * grid_shapes[0][2])
         x = [u.flatten(2).transpose(1, 2) for u in x]
-        seq_lens = torch.tensor([u.size(1) for u in x], dtype=torch.long, device=device)
-        assert seq_lens.max() <= seq_len
+        seq_lengths = [int(u.size(1)) for u in x]
+        assert max(seq_lengths) <= seq_len
+        metadata_key = (
+            tuple(grid_shapes),
+            tuple(seq_lengths),
+            str(device),
+        )
+        metadata = self._inference_metadata_cache.get(metadata_key)
+        if metadata is None:
+            metadata = (
+                torch.tensor(grid_shapes, dtype=torch.long, device=device),
+                torch.tensor(seq_lengths, dtype=torch.long, device=device),
+            )
+            self._inference_metadata_cache[metadata_key] = metadata
+        grid_sizes, seq_lens = metadata
         x = torch.cat(x, dim=0)
 
         e = self.time_embedding(
@@ -2203,7 +2239,7 @@ class CausalWanModel(ModelMixin, ConfigMixin):
         query_ref_token_len = N_r if include_ref_tokens else 0
         if include_ref_tokens:
             ref_tokens = ref_info["tokens"]
-            e0 = self._expand_frame_modulation_to_tokens(e0, math.prod(grid_sizes[0][1:]).item())
+            e0 = self._expand_frame_modulation_to_tokens(e0, frame_seqlen)
             ref_e0 = self._zero_ref_modulation(
                 batch_size=x.shape[0],
                 token_len=query_ref_token_len,
@@ -2215,6 +2251,9 @@ class CausalWanModel(ModelMixin, ConfigMixin):
 
         for block in self.blocks:
             block.self_attn._is_teacher_forcing = False
+            # Static Python metadata avoids reading grid_sizes back from CUDA
+            # inside every layer of every denoising pass.
+            block.self_attn._frame_seqlen = frame_seqlen
             block.self_attn._num_ref_tokens = N_r
             block.self_attn._query_ref_token_len = query_ref_token_len
             if ref_info is not None:

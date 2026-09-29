@@ -26,29 +26,28 @@ SCENE_PRESETS_PATH = WEB_DIR / "scene_presets.yaml"
 PRESETS_FALLBACK_PROMPT = "请编辑 web_client/scene_presets.yaml：设置 default_prompt 与 groups。"
 
 # ── 流式推理 ─────────────────────────────────────────────────────────────────
-STREAM_HEIGHT = int(os.environ.get("ABOT_STREAM_HEIGHT", "480"))
-STREAM_WIDTH = int(os.environ.get("ABOT_STREAM_WIDTH", "832"))
+STREAM_HEIGHT = int(os.environ.get("ABOT_STREAM_HEIGHT", "704"))
+STREAM_WIDTH = int(os.environ.get("ABOT_STREAM_WIDTH", "1280"))
 
 
 # ── 模型推理参数 ─────────────────────────────────────────────────────────────
 LATENT_CHANNELS = 48
-LATENT_HEIGHT = STREAM_HEIGHT // 16   # 30 for the A10 default
-LATENT_WIDTH = STREAM_WIDTH // 16     # 52 for the A10 default
+LATENT_HEIGHT = STREAM_HEIGHT // 16   # 44 at 704p
+LATENT_WIDTH = STREAM_WIDTH // 16     # 80 at 1280p
 
 # ── 运行时阈值 ───────────────────────────────────────────────────────────────
 LOW_MEMORY_THRESHOLD_GB = 40         # 低于此 VRAM (GB) 启用动态内存交换
-FRAME_QUEUE_SIZE = 2                 # 帧队列最大深度
-UI_FRAME_STRIDE = max(1, int(os.environ.get("ABOT_UI_FRAME_STRIDE", "3")))
+FRAME_QUEUE_SIZE = max(12, int(os.environ.get("ABOT_FRAME_QUEUE_SIZE", "16")))
 QUEUE_POLL_TIMEOUT = 0.5             # 队列轮询超时 (秒)
 WORKER_JOIN_TIMEOUT = 10             # Worker 线程退出等待 (秒)
 SHUTDOWN_GRACE_SECONDS = 3           # 优雅关机等待 (秒)
-MAX_BLOCKS = 600                      # 最大生成块数（视频长度限制）
+MAX_BLOCKS = int(os.environ.get("ABOT_MAX_BLOCKS", "300"))
 FRAMES_PER_BLOCK = 12                # 每 block 解码后的标准帧数
 FIRST_BLOCK_FRAMES = 9              # 首 block 解码帧数（含参考图，少于标准帧数）
 
 # ── 视频输出 ───────────────────────────────────────────────────────────────────
 OUTPUT_DIR = Path(os.environ.get("ABOT_OUTPUT_DIR", str(PROJECT_ROOT / "outputs")))
-VIDEO_FPS = 12                         # 视频帧率
+VIDEO_FPS = max(1, int(os.environ.get("ABOT_DISPLAY_FPS", "8")))
 VIDEO_CODEC = "libx264"                # 视频编码器
 VIDEO_QUALITY = 8                      # 视频质量 (1-10, 越小质量越高)
 MAX_VIDEO_HISTORY = 10                 # Gallery 最多显示的视频数量
@@ -64,8 +63,8 @@ CONFLICT_GROUPS = [
 ]
 
 # ── 服务器 ───────────────────────────────────────────────────────────────────
-SERVER_NAME = "0.0.0.0"
-SERVER_PORT = int(os.environ.get("PORT", os.environ.get("GRADIO_SERVER_PORT", "7860")))
+SERVER_NAME = os.environ.get("SERVER_NAME", "0.0.0.0")
+SERVER_PORT = int(os.environ.get("PORT", os.environ.get("SERVER_PORT", "7860")))
 # SSL 已禁用，使用 HTTP
 
 # ── 推理后端（与 configs/*.yaml 对齐，UI 不再暴露开关）────────────────────────
@@ -78,4 +77,12 @@ _vae_type = str(getattr(_merged_ui_cfg, "vae_type", "")).strip().lower()
 if not _vae_type:
     _vae_type = "taew2_2"
 VAE_TYPE = _vae_type
-USE_FP8_GEMM = bool(getattr(_merged_ui_cfg, "use_fp8_gemm", False))
+QUANT_MODE = os.environ.get(
+    "ABOT_QUANT_MODE",
+    "fp8" if bool(getattr(_merged_ui_cfg, "use_fp8_gemm", False)) else "bf16",
+).strip().lower()
+if QUANT_MODE not in {"fp8", "bf16", "hybrid"}:
+    raise ValueError(
+        "ABOT_QUANT_MODE must be one of: fp8, bf16, hybrid"
+    )
+USE_FP8_GEMM = QUANT_MODE != "bf16"

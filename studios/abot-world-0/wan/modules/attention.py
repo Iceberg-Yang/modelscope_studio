@@ -1,4 +1,6 @@
 # Copyright 2024-2025 The Alibaba Wan Team Authors. All rights reserved.
+import os
+import statistics
 import torch
 
 try:
@@ -21,6 +23,8 @@ except ModuleNotFoundError:
     FLASH_ATTN_2_AVAILABLE = False
 
 try:
+    if os.environ.get("ABOT_DISABLE_SAGEATTENTION", "0") == "1":
+        raise ModuleNotFoundError("SageAttention disabled by L20N bootstrap")
     from sageattention import sageattn
     SAGE_ATTN_AVAILABLE = True
 except ModuleNotFoundError:
@@ -51,8 +55,34 @@ print(f"FLASH_ATTN_3_AVAILABLE: {FLASH_ATTN_3_AVAILABLE}")
 print(f"FLASH_ATTN_2_AVAILABLE: {FLASH_ATTN_2_AVAILABLE}")
 
 
-def _resolve_default_attn_backend():
+def _normalize_backend_name(name):
+    aliases = {
+        "flash_attn": "flash_attn_2",
+        "flashattention2": "flash_attn_2",
+        "sageattention": "sageattn",
+        "sageattention2": "sageattn",
+    }
+    normalized = str(name or "auto").strip().lower()
+    return aliases.get(normalized, normalized)
+
+
+REQUESTED_ATTN_BACKEND = _normalize_backend_name(
+    os.environ.get("ABOT_SELF_ATTN_BACKEND", "auto")
+)
+_ATTN_BACKEND_CALL_COUNTS = {}
+
+
+def _resolve_default_attn_backend(requested=None):
     """根据优先级数组和当前环境可用性，解析出默认的 attention 后端。"""
+    requested = _normalize_backend_name(
+        REQUESTED_ATTN_BACKEND if requested is None else requested
+    )
+    if requested != "auto":
+        if not _is_backend_available(requested):
+            raise RuntimeError(
+                f"Requested attention backend {requested!r} is unavailable"
+            )
+        return requested
     availability = {
         'sageattn3': SAGE_ATTN_3_BLACKWELL_AVAILABLE,
         'sageattn': SAGE_ATTN_AVAILABLE,
@@ -150,9 +180,154 @@ def _resolve_auto_backend(
 # 模块初始化时确定默认 attention 后端
 DEFAULT_ATTN_BACKEND = _resolve_default_attn_backend()
 
+
+def set_default_attn_backend(backend):
+    """Select the process-wide self-attention backend after a runtime benchmark."""
+    global DEFAULT_ATTN_BACKEND
+    DEFAULT_ATTN_BACKEND = _resolve_default_attn_backend(backend)
+    print(
+        f"[ATTN_SELECT] requested={REQUESTED_ATTN_BACKEND} "
+        f"selected={DEFAULT_ATTN_BACKEND}",
+        flush=True,
+    )
+    return DEFAULT_ATTN_BACKEND
+
+
+def attention_backend_status():
+    return {
+        "requested_backend": REQUESTED_ATTN_BACKEND,
+        "default_backend": DEFAULT_ATTN_BACKEND,
+        "call_counts": dict(_ATTN_BACKEND_CALL_COUNTS),
+    }
+
+
+@torch.inference_mode()
+def benchmark_attention_backends(
+    *,
+    num_heads,
+    head_dim,
+    first_query_tokens,
+    steady_query_tokens,
+    steady_kv_tokens,
+    dtype=torch.bfloat16,
+    warmup=1,
+    repeats=3,
+    include_sdpa=False,
+    min_speedup_ratio=0.03,
+):
+    """Benchmark the two production backends with ABot's real self-attn shapes."""
+    if not torch.cuda.is_available():
+        return {"selected": DEFAULT_ATTN_BACKEND, "results": {}}
+
+    candidates = [
+        name
+        for name in ("sageattn", "flash_attn_2")
+        if _is_backend_available(name)
+    ]
+    if include_sdpa:
+        candidates.append("sdpa")
+    shapes = {
+        "first": (int(first_query_tokens), int(first_query_tokens)),
+        "steady": (int(steady_query_tokens), int(steady_kv_tokens)),
+    }
+    results = {}
+    device = torch.device("cuda")
+    benchmark_generator = torch.Generator(device=device)
+    benchmark_generator.manual_seed(20260730)
+
+    for backend in candidates:
+        backend_results = {}
+        try:
+            for shape_name, (q_tokens, kv_tokens) in shapes.items():
+                q = torch.randn(
+                    (1, q_tokens, int(num_heads), int(head_dim)),
+                    device=device,
+                    dtype=dtype,
+                    generator=benchmark_generator,
+                )
+                k = torch.randn(
+                    (1, kv_tokens, int(num_heads), int(head_dim)),
+                    device=device,
+                    dtype=dtype,
+                    generator=benchmark_generator,
+                )
+                v = torch.randn(
+                    k.shape,
+                    device=device,
+                    dtype=dtype,
+                    generator=benchmark_generator,
+                )
+                for _ in range(max(0, int(warmup))):
+                    attention(q, k, v, backend=backend, _count_backend=False)
+                torch.cuda.synchronize()
+                samples = []
+                for _ in range(max(1, int(repeats))):
+                    start = torch.cuda.Event(enable_timing=True)
+                    end = torch.cuda.Event(enable_timing=True)
+                    start.record()
+                    attention(q, k, v, backend=backend, _count_backend=False)
+                    end.record()
+                    end.synchronize()
+                    samples.append(float(start.elapsed_time(end)))
+                backend_results[shape_name] = round(
+                    statistics.median(samples), 3
+                )
+                del q, k, v
+            # Steady state dominates a long interactive session.
+            backend_results["score_ms"] = round(
+                backend_results["first"] + 4.0 * backend_results["steady"],
+                3,
+            )
+            results[backend] = backend_results
+            print(
+                f"[ATTN_BENCH] backend={backend} "
+                f"first={backend_results['first']:.3f}ms "
+                f"steady={backend_results['steady']:.3f}ms "
+                f"score={backend_results['score_ms']:.3f}",
+                flush=True,
+            )
+        except Exception as exc:
+            results[backend] = {"error": repr(exc)}
+            print(
+                f"[ATTN_BENCH] backend={backend} failed={exc!r}",
+                flush=True,
+            )
+        finally:
+            torch.cuda.empty_cache()
+
+    valid = {
+        name: values
+        for name, values in results.items()
+        if "score_ms" in values
+    }
+    selected = DEFAULT_ATTN_BACKEND
+    if REQUESTED_ATTN_BACKEND == "auto" and valid:
+        candidate = min(valid, key=lambda name: valid[name]["score_ms"])
+        baseline = valid.get(DEFAULT_ATTN_BACKEND)
+        if (
+            candidate == DEFAULT_ATTN_BACKEND
+            or baseline is None
+            or valid[candidate]["score_ms"]
+            <= baseline["score_ms"] * (1.0 - float(min_speedup_ratio))
+        ):
+            selected = candidate
+        set_default_attn_backend(selected)
+    else:
+        set_default_attn_backend(REQUESTED_ATTN_BACKEND)
+    return {
+        "selected": selected,
+        "results": results,
+        "shapes": shapes,
+        "min_speedup_ratio": float(min_speedup_ratio),
+    }
+
 __all__ = [
     'ATTN_BACKEND_PRIORITY',
     'DEFAULT_ATTN_BACKEND',
+    'REQUESTED_ATTN_BACKEND',
+    'attention_backend_status',
+    'benchmark_attention_backends',
+    'set_default_attn_backend',
     'flash_attention',
     'sage_attention',
     'sage_attention3_blackwell',
@@ -402,6 +577,7 @@ def attention(
     fa_version=None,
     backend='auto',
     smooth_k=True,
+    _count_backend=True,
 ):
     """
     backend: 'auto' | 'sageattn3' | 'sageattn' | 'flash_attn_3' | 'flash_attn_2' | 'flash_attn' | 'sdpa'
@@ -417,6 +593,11 @@ def attention(
             dropout_p=dropout_p,
             causal=causal,
             window_size=window_size,
+        )
+
+    if _count_backend:
+        _ATTN_BACKEND_CALL_COUNTS[backend] = (
+            _ATTN_BACKEND_CALL_COUNTS.get(backend, 0) + 1
         )
 
     if backend == 'sageattn':

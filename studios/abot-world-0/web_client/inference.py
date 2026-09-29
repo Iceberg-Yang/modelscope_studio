@@ -20,7 +20,7 @@ from web_client.config import (
     LATENT_CHANNELS, LATENT_HEIGHT, LATENT_WIDTH,
     FRAME_QUEUE_SIZE, QUEUE_POLL_TIMEOUT, WORKER_JOIN_TIMEOUT,
     VAE_TYPE, USE_FP8_GEMM, OUTPUT_DIR, VIDEO_FPS, VIDEO_CODEC, VIDEO_QUALITY,
-    MAX_BLOCKS, FRAMES_PER_BLOCK, FIRST_BLOCK_FRAMES, UI_FRAME_STRIDE,
+    MAX_BLOCKS, FRAMES_PER_BLOCK, FIRST_BLOCK_FRAMES,
 )
 from web_client.state import state
 from web_client.pipeline_loader import get_pipeline, decode_block_to_frames, _init_lock
@@ -93,7 +93,7 @@ def _btn_update():
     if state.is_stopping:
         return gr.update(value="停止中...", interactive=False)
     if state.is_running:
-        return gr.update(value="重塑你的世界", interactive=not state.waiting_for_new_frames)
+        return gr.update(value="唤醒你的世界", interactive=False)
     return gr.update(value="唤醒你的世界", interactive=True)
 
 
@@ -263,16 +263,10 @@ def start_stream(prompt: str, ref_image_path=None, vae_type: str | None = None, 
                     out_overlay = gr.update(visible=False)
                 else:
                     out_overlay = gr.skip()
-                # 更新播放进度。Gradio 的 Image 输出会把每一帧写入临时
-                # WebP，再由浏览器单独请求；通过 Studio 代理逐帧推送容易
-                # 产生大量被取消的请求，因此只渲染抽样帧，视频文件仍保存全帧。
+                # 更新播放进度
                 state.played_frame_count += 1
-                should_render = (i % UI_FRAME_STRIDE == 0) or (i == frames_count - 1)
-                if should_render:
-                    progress_html = format_progress_bar_html(
-                        state.played_frame_count, state.frame_count, total_frames
-                    )
-                    yield frame, out_status, out_prompt, out_btn, out_overlay, progress_html
+                progress_html = format_progress_bar_html(state.played_frame_count, state.frame_count, total_frames)
+                yield frame, out_status, out_prompt, out_btn, out_overlay, progress_html
 
                 # 仅在帧与帧之间控制间隔：第一帧尽快推送
                 if i < frames_count - 1:
@@ -386,16 +380,42 @@ def show_completion_toast():
 
 # ── Gradio 回调 ───────────────────────────────────────────────────────────────
 
-def check_model_ready_ui():
-    """供 Timer 轮询：返回当前状态文案、按钮状态与 overlay 可见性。"""
+def check_model_ready_ui(session_id: str = ""):
+    """Poll model readiness and stop the timer once initialization resolves."""
+    if state.model_error:
+        return (
+            f"**模型初始化失败**：`{state.model_error}`",
+            gr.update(value="唤醒你的世界", interactive=False),
+            gr.update(visible=False),
+            gr.Timer(active=False),
+        )
     if state.model_ready:
         if DEBUG_FRONTEND_ONLY:
-            return "**[仅前端调试]** 未加载模型，界面可正常操作。", _btn_update(), gr.skip()
-        if state.is_running:
-            # 推理中由 start_stream yield 推送帧率等详细信息，Timer 不覆盖
-            return gr.skip(), _btn_update(), gr.skip()
-        return "**就绪** — 请输入 Prompt 并点击「唤醒你的世界」。", _btn_update(), gr.update(visible=False)
-    return "**模型加载中…** 加载完成后「唤醒你的世界」将可用。", _btn_update(), gr.skip()
+            return (
+                "**[仅前端调试]** 未加载模型，界面可正常操作。",
+                _btn_update(),
+                gr.skip(),
+                gr.Timer(active=False),
+            )
+        if session_id:
+            return (
+                gr.skip(),
+                gr.update(value="唤醒你的世界", interactive=False),
+                gr.skip(),
+                gr.Timer(active=False),
+            )
+        return (
+            "**就绪** — 请输入 Prompt 并点击「唤醒你的世界」。",
+            gr.update(value="唤醒你的世界", interactive=True),
+            gr.update(visible=False),
+            gr.Timer(active=False),
+        )
+    return (
+        "**模型加载中…** 加载完成后「唤醒你的世界」将可用。",
+        _btn_update(),
+        gr.skip(),
+        gr.skip(),
+    )
 
 
 def on_click_update_prompt(prompt: str):
@@ -439,5 +459,73 @@ def on_stop():
         format_current_prompt_md(state.shared_prompt),
         _btn_update(),
         gr.update(visible=False),
+        "",
+    )
+
+
+# ── iframe + 双向 WebSocket 版按钮回调 ───────────────────────────────────────
+
+
+def _iframe_html(session_id: str) -> str:
+    """返回 iframe，尺寸/边框/发光与 gr.Image 一致，自然替换图片位置。"""
+    return (
+        f'<iframe id="abot-stream-iframe" data-abot-stream="true" '
+        f'src="/stream_page?session_id={session_id}" '
+        f'style="display:block;margin:0 auto;'
+        f'width:100%;max-width:880px;aspect-ratio:16/9;'
+        f'border:3px solid #05d9e8;border-radius:2px;'
+        f'box-shadow:0 0 30px rgba(5,217,232,0.6),0 0 80px rgba(5,217,232,0.4);" '
+        f'allowfullscreen></iframe>'
+    )
+
+
+def on_click_start_ws(prompt: str, ref_image_path: str | None = None):
+    """iframe 版启动回调：启动 WebSocket 会话，返回 iframe HTML。
+    额外返回 image_output 更新：启动时隐藏图片，腾出位置给 iframe。
+    """
+    pm = format_current_prompt_md((prompt or "").strip())
+    if DEBUG_FRONTEND_ONLY:
+        return "", "**[仅前端调试]** 未加载模型。", pm, _btn_update(), gr.update(visible=True), "", gr.skip(), ""
+    if not state.model_ready:
+        return "", "**模型加载中…** 请稍候再试。", pm, _btn_update(), gr.update(visible=True), "", gr.skip(), ""
+    ref_path = ref_image_path or DEFAULT_REF_IMAGE
+    try:
+        from web_client.ws_stream import start_game, is_model_ready
+        if not is_model_ready():
+            return "", "**模型加载中…** 请稍候再试。", pm, _btn_update(), gr.update(visible=True), "", gr.skip(), ""
+        session_id = start_game(seed_path=ref_path, prompt=prompt or "", seed=42)
+        html = _iframe_html(session_id)
+        return (
+            html,
+            "**已进入 GPU 队列…** WebSocket 连接中。",
+            pm,
+            gr.update(value="唤醒你的世界", interactive=False),
+            gr.update(visible=False),
+            "",
+            gr.update(visible=False),
+            session_id,
+        )
+    except Exception as e:
+        return "", f"**错误**：{e}", pm, _btn_update(), gr.update(visible=False), "", gr.skip(), ""
+
+
+def on_stop_ws(
+    session_id: str = "",
+    ref_image_path: str | None = None,
+    prompt: str = "",
+):
+    """iframe 版停止回调：清空 iframe，恢复参考图。"""
+    from web_client.ws_stream import stop_game
+    if session_id:
+        stop_game(session_id)
+    final_ref = ref_image_path or DEFAULT_REF_IMAGE
+    return (
+        "",  # 清空 iframe
+        "**已停止**",
+        format_current_prompt_md(prompt or ""),
+        gr.update(value="唤醒你的世界", interactive=state.model_ready),
+        gr.update(visible=False),
+        "",
+        gr.update(visible=True, value=final_ref),  # 恢复参考图
         "",
     )
